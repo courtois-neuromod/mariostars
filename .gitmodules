@@ -1,0 +1,5 @@
+[submodule "stimuli"]
+	path = stimuli
+	url = git@github.com:courtois-neuromod/mariostars.stimuli.git
+	datalad-id = 13404e51-6050-4ed4-902b-f8bc42cded1f
+	datalad-url = git@github.com:courtois-neuromod/mariostars.stimuli.git
