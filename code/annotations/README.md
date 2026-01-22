@@ -90,19 +90,20 @@ The script produces `*_desc-annotated_events.tsv` files with the following struc
 
 ### Event Types
 
-**Note**: The event types and detection logic below are placeholders based on the original Super Mario Bros. These need to be verified and updated based on the actual `data.json` file for Super Mario All-Stars.
+**Note**: Button press events come from the replay file and are always available. Game state events require variables from `data.json` which are mostly missing.
 
 #### Repetition Events
 - `gym-retro_game` - Base repetition events from the original events file
 
-#### Button Press Events
+#### Button Press Events ✅ AVAILABLE
 Continuous events with onset and duration:
 - `UP`, `DOWN`, `LEFT`, `RIGHT` - D-pad directions
-- `A` - Jump button
-- `B` - Run/fireball button
+- `A`, `B`, `X`, `Y` - Face buttons
+- `L`, `R` - Shoulder buttons (SNES)
 - `START` - Pause
 - `SELECT` - Mode select
-- **TODO**: Verify if L/R shoulder buttons are used in Super Mario All-Stars
+
+**Status**: Button inputs come from the .bk2 replay file itself (not data.json) and are always extracted automatically. All SNES buttons ARE generated!
 
 #### Enemy Kill Events
 Instantaneous events (duration=0):
@@ -119,10 +120,9 @@ Instantaneous events (duration=0):
 
 #### Item Collection Events
 Instantaneous events (duration=0):
-- `Coin_collected` - Coin counter increases
-- `Powerup_collected` - Super mushroom or fire flower collected
-- `Brick_smashed` - Brick destroyed by jumping
-- **TODO**: Verify score increments and player_state values
+- `Coin_collected` - Coin counter increases ✅ AVAILABLE (coins variable exists in data.json)
+- `Powerup_collected` - Super mushroom or fire flower collected ❌ Requires player_state
+- `Brick_smashed` - Brick destroyed by jumping ❌ Requires jump_airborne and score tracking
 
 ### Phase Information
 
@@ -130,7 +130,22 @@ Each run is classified as:
 - **discovery**: Single level repeated multiple times (practice/training)
 - **practice**: Multiple different levels in sequence (testing)
 
-## Placeholder Logic - Requires Data.json
+## Current Status: What Works Now
+
+### ✅ Currently Working Events
+Based on available data from replay files and incomplete data.json:
+- **All button press events** (UP, DOWN, LEFT, RIGHT, A, B, X, Y, L, R, START, SELECT) - from replay file
+- **Coin collection events** - `coins` variable exists in data.json
+- **Life loss events** - `lives` variable exists in data.json
+
+### ❌ Not Yet Working Events
+Require missing RAM variables from data.json:
+- **Enemy kills** - Requires enemy_kill30-35 variables
+- **Powerup loss** - Requires powerstate variable
+- **Powerup collection** - Requires player_state variable
+- **Brick smashing** - Requires jump_airborne and score tracking variables
+
+## Placeholder Logic - Requires Complete Data.json
 
 The following sections of the code contain placeholder logic that **must be updated** once the `data.json` file for Super Mario All-Stars is available:
 
@@ -153,11 +168,6 @@ The following sections of the code contain placeholder logic that **must be upda
 - **Location**: `generate_powerup_events()` function
 - **Current**: Detects player_state values [9, 12, 13]
 - **TODO**: Verify player_state values for powerup animation
-
-### 5. Button Controls
-- **Location**: `create_runevents()` function
-- **Current**: Assumes standard SNES controls (UP, DOWN, LEFT, RIGHT, A, B, START, SELECT)
-- **TODO**: Verify if L/R shoulder buttons are used
 
 ## Dependencies
 
@@ -187,10 +197,12 @@ python code/annotations/generate_annotations.py --datapath .
 - The script skips files that already have annotated versions
 - To force regeneration, delete existing `*_desc-annotated_events.tsv` files
 
-### Incorrect event detection
-- If events seem incorrect, check the TODO comments in the code
-- Compare with the actual `data.json` file for Super Mario All-Stars
-- Update the placeholder values and logic as needed
+### Expected event types in annotated files
+- You WILL see button press events (UP, DOWN, LEFT, RIGHT, A, B, X, Y, L, R, START, SELECT)
+- You WILL see coin collection events (Coin_collected)
+- You WILL see life loss events (Hit/life_lost)
+- You will NOT see enemy kills, powerup events, or brick smashing (requires missing data.json variables)
+- If button presses or coins are missing, check that _variables.json files were generated correctly
 
 ## Next Steps
 

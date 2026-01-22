@@ -4,12 +4,12 @@ Generate annotated event files for the Mario Stars dataset from replay variables
 
 This script reads game variables from replay processing and generates detailed
 BIDS-compatible event files containing:
-  - Button press events (UP, DOWN, LEFT, RIGHT, A, B, START, SELECT, etc.)
-  - Kill events (stomp, impact, kick, etc.)
-  - Hit events (powerup lost, life lost)
-  - Brick smashing events
-  - Coin collection events
-  - Powerup collection events
+  - Button press events (UP, DOWN, LEFT, RIGHT, A, B, L, R, X, Y, START, SELECT) ✅ AVAILABLE
+  - Kill events (stomp, impact, kick, etc.) ❌ Requires enemy_kill variables
+  - Hit events (life lost ✅, powerup lost ❌ requires powerstate)
+  - Brick smashing events ❌ Requires jump_airborne and score tracking
+  - Coin collection events (✅ coins variable exists in data.json!)
+  - Powerup collection events ❌ Requires player_state variable
 
 Usage:
     python generate_annotations.py
@@ -20,9 +20,10 @@ Usage:
 Note: Requires replay files (_variables.json) in gamelogs/ folders.
       Run create_replays.py first if they don't exist.
 
-IMPORTANT: This script contains placeholders (marked with TODO) that need to be
-updated once the data.json file for Super Mario All-Stars is available. The
-event detection logic needs to be verified against actual game variables.
+IMPORTANT: Button inputs come from the replay file (.bk2) and are always available.
+Game state events (kills, powerups, etc.) require RAM variables from data.json.
+The current data.json for Super Mario All-Stars is incomplete, so only button presses,
+coin collection, and life loss events can be detected until data.json is updated.
 """
 
 import argparse
@@ -59,9 +60,10 @@ def create_runevents(runvars, run_id, events_dataframe, FS=60):
         rep_index = events_dataframe['rep_index'].iloc[idx]
 
         if len(repvars.keys()) > 0:  # Check if repetition logs are available
-            # Actions
-            # TODO: Verify button names for Super Mario All-Stars (may include L/R shoulder buttons)
-            ACTIONS = ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "START", "SELECT"]
+            # Actions - button inputs are always available from replay file
+            # SNES has: D-pad (UP, DOWN, LEFT, RIGHT), Face buttons (A, B, X, Y),
+            # Shoulder buttons (L, R), and START/SELECT
+            ACTIONS = ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "X", "Y", "L", "R", "START", "SELECT"]
             for act in ACTIONS:
                 temp_df = generate_key_events(repvars, act, FS=FS)
                 temp_df["onset"] = temp_df["onset"] + repvars["rep_onset"]
