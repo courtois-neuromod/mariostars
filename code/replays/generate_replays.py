@@ -38,94 +38,169 @@ from videogames_utils.psychophysics import (
 
 
 # ============================================================================
-# Mario Stars-specific utility functions
+# Mario Stars-specific utility functions (using data.json variables)
 # ============================================================================
 
 def _calculate_world_and_level(level_str):
     """Extract world and level numbers from level string."""
-    # TODO: Adjust this based on mariostars level naming convention
-    return level_str[1], level_str[-1]
+    # Mario Stars uses naming like "W1L1", "W2L3", etc.
+    try:
+        if level_str and len(level_str) >= 2:
+            return level_str[1], level_str[-1]
+    except:
+        pass
+    return None, None
 
 
 def _calculate_distance_traveled(repetition_variables):
-    """Calculate total X distance traveled. Returns None if required variables missing."""
+    """Calculate total X distance traveled using scroll positions."""
     try:
-        start_x = (repetition_variables["xscrollLo"][0] +
-                   (256 * repetition_variables["xscrollHi"][0]))
-        end_x = (repetition_variables["xscrollLo"][-1] +
-                 (256 * repetition_variables["xscrollHi"][-1]))
-        return end_x - start_x
-    except KeyError:
-        return None
+        # Use scroll_x_high and scroll_x_low if available
+        if "scroll_x_high" in repetition_variables and "scroll_x_low" in repetition_variables:
+            start_x = (repetition_variables["scroll_x_low"][0] +
+                       (256 * repetition_variables["scroll_x_high"][0]))
+            end_x = (repetition_variables["scroll_x_low"][-1] +
+                     (256 * repetition_variables["scroll_x_high"][-1]))
+            return end_x - start_x
+        # Fallback to player position if scroll not available
+        elif "player_x_low" in repetition_variables and "player_x_high" in repetition_variables:
+            start_x = (repetition_variables["player_x_low"][0] +
+                       (256 * repetition_variables["player_x_high"][0]))
+            end_x = (repetition_variables["player_x_low"][-1] +
+                     (256 * repetition_variables["player_x_high"][-1]))
+            return end_x - start_x
+    except (KeyError, IndexError):
+        pass
+    return None
+
+
+def _determine_outcome(repetition_variables):
+    """
+    Determine how the replay ended: 'cleared', 'death', 'timeout', or 'unknown'.
+    
+    Uses player_action_state for death detection:
+    - State 10: Big Mario shrinks (powerup lost, not death)
+    - State 11: Mario death animation
+    
+    Also checks timer for timeout deaths.
+    """
+    try:
+        # Check if lives decreased (death occurred)
+        lives_start = repetition_variables["lives"][0]
+        lives_end = repetition_variables["lives"][-1]
+        
+        if lives_end < lives_start:
+            # Check if it was a timeout
+            if "level_timer_hundreds" in repetition_variables:
+                timer_h = repetition_variables["level_timer_hundreds"][-1]
+                timer_t = repetition_variables["level_timer_tens"][-1] if "level_timer_tens" in repetition_variables else 0
+                timer_o = repetition_variables["level_timer_ones"][-1] if "level_timer_ones" in repetition_variables else 0
+                if timer_h == 0 and timer_t == 0 and timer_o == 0:
+                    return "timeout"
+            return "death"
+        
+        # If lives didn't decrease, check if level was cleared
+        # Look for player_action_state transitions that indicate completion
+        if "player_action_state" in repetition_variables:
+            final_state = repetition_variables["player_action_state"][-1]
+            # State 11 is death, if that's not the final state and lives didn't decrease, likely cleared
+            if final_state != 11 and lives_end >= lives_start:
+                return "cleared"
+        
+        return "cleared"  # Default assumption if no death detected
+        
+    except (KeyError, IndexError):
+        return "unknown"
 
 
 def _check_level_cleared(repetition_variables):
-    """Determine if level was successfully cleared. Returns None if required variables missing."""
-    try:
-        if repetition_variables["player_y_screen"][-1] > 1:
-            return False
-        if repetition_variables["lives"][-1] == -1:
-            return False
-        if repetition_variables["player_state"][-1] in [6, 11]:
-            return False
-        return True
-    except KeyError:
+    """Determine if level was successfully cleared."""
+    outcome = _determine_outcome(repetition_variables)
+    if outcome == "unknown":
         return None
+    return outcome == "cleared"
 
 
-def _count_enemy_kills_for_slot(repetition_variables, slot_idx):
-    """Count kills for a specific enemy slot. Returns 0 if required variables missing."""
-    try:
-        kill_count = 0
-        enemy_key = f"enemy_kill3{slot_idx}"
-
-        for idx, val in enumerate(repetition_variables[enemy_key][:-1]):
-            if val in [4, 34, 132]:
-                if repetition_variables[enemy_key][idx + 1] != val:
-                    if slot_idx == 5 and repetition_variables["powerup_yes_no"] == 0:
-                        kill_count += 1
-                    elif slot_idx != 5:
-                        kill_count += 1
-        return kill_count
-    except KeyError:
-        return 0
+def _count_kills_via_sprite_state(repetition_variables):
+    """
+    Count kills using sprite_state_* transitions.
+    
+    Kill states in Mario Stars:
+    - State transition TO 4: stomp (jumped on enemy)
+    - State transition TO 34: impact (shell, fireball, or star mode kill)
+    """
+    kill_count = 0
+    n_frames = None
+    
+    # Determine frame count from any available variable
+    for key in repetition_variables:
+        if isinstance(repetition_variables[key], list) and len(repetition_variables[key]) > 0:
+            n_frames = len(repetition_variables[key])
+            break
+    
+    if n_frames is None or n_frames < 2:
+        return None
+    
+    # Check all 8 sprite slots
+    slots_found = 0
+    for slot_idx in range(8):
+        sprite_state_var = f"sprite_state_{slot_idx}"
+        if sprite_state_var not in repetition_variables:
+            continue
+        
+        slots_found += 1
+        sprite_states = repetition_variables[sprite_state_var]
+        
+        for frame_idx in range(1, len(sprite_states)):
+            prev_val = sprite_states[frame_idx - 1]
+            curr_val = sprite_states[frame_idx]
+            
+            # Detect transition TO kill states
+            if prev_val != 4 and curr_val == 4:  # Stomp
+                kill_count += 1
+            elif prev_val != 34 and curr_val == 34:  # Impact
+                kill_count += 1
+    
+    return kill_count if slots_found > 0 else None
 
 
 def count_kills(repetition_variables):
-    """Count total enemies killed during replay. Returns None if no enemy slots available."""
-    kills = sum(_count_enemy_kills_for_slot(repetition_variables, i) for i in range(6))
-    # If all slots returned 0 due to missing keys, we can't determine kills
-    # Check if at least one enemy key exists
-    if not any(f"enemy_kill3{i}" in repetition_variables for i in range(6)):
-        return None
-    return kills
+    """Count total enemies killed during replay."""
+    return _count_kills_via_sprite_state(repetition_variables)
 
 
 def count_bricks_destroyed(repetition_variables):
-    """Count bricks destroyed by jumping. Returns None if required variables missing."""
+    """
+    Count bricks destroyed. In Mario Stars, brick breaking gives 50 points.
+    """
     try:
         score_increments = list(np.diff(repetition_variables["score"]))
-        bricks_destroyed = 0
-
-        for idx, inc in enumerate(score_increments):
-            if inc == 5 and repetition_variables["jump_airborne"][idx] == 1:
-                bricks_destroyed += 1
-        return bricks_destroyed
+        # In Mario Stars, brick breaking gives 50 points
+        return sum(1 for inc in score_increments if inc == 50)
     except KeyError:
         return None
 
 
-def _count_powerstate_hits(repetition_variables):
-    """Count hits from powerstate changes. Returns None if required variables missing."""
+def _count_powerup_lost_hits(repetition_variables):
+    """Count hits where Mario lost a powerup (transition to player_action_state 10)."""
     try:
-        diff_state = list(np.diff(repetition_variables["powerstate"]))
-        return sum(1 for val in diff_state if val < -10000)
-    except KeyError:
+        if "player_action_state" not in repetition_variables:
+            return None
+        
+        states = repetition_variables["player_action_state"]
+        hit_count = 0
+        
+        for idx in range(1, len(states)):
+            if states[idx - 1] != 10 and states[idx] == 10:
+                hit_count += 1
+        
+        return hit_count
+    except (KeyError, IndexError):
         return None
 
 
 def _count_life_losses(repetition_variables):
-    """Count hits from life losses. Returns None if required variables missing."""
+    """Count hits from life losses."""
     try:
         diff_lives = list(np.diff(repetition_variables["lives"]))
         return sum(1 for val in diff_lives if val < 0)
@@ -134,25 +209,60 @@ def _count_life_losses(repetition_variables):
 
 
 def count_hits_taken(repetition_variables):
-    """Count total hits taken (damage + deaths). Returns None if required variables missing."""
-    powerstate_hits = _count_powerstate_hits(repetition_variables)
+    """Count total hits taken (powerup losses + deaths)."""
+    powerup_hits = _count_powerup_lost_hits(repetition_variables)
     life_losses = _count_life_losses(repetition_variables)
-    if powerstate_hits is None and life_losses is None:
+    if powerup_hits is None and life_losses is None:
         return None
-    return (powerstate_hits or 0) + (life_losses or 0)
+    return (powerup_hits or 0) + (life_losses or 0)
 
 
 def count_powerups_collected(repetition_variables):
-    """Count powerups collected during replay. Returns None if required variables missing."""
+    """
+    Count powerups collected using player_action_state transitions.
+    
+    Powerup collection states in Mario Stars:
+    - Transition 8 → 9: Mushroom (small to big)
+    - Transition 8 → 12: Fire Flower (big to fire)
+    """
     try:
+        if "player_action_state" not in repetition_variables:
+            return None
+        
+        states = repetition_variables["player_action_state"]
         powerup_count = 0
-
-        for idx, val in enumerate(repetition_variables["player_state"][:-1]):
-            if val in [9, 12, 13]:
-                if repetition_variables["player_state"][idx + 1] != val:
-                    powerup_count += 1
+        
+        for idx in range(1, len(states)):
+            prev_state = states[idx - 1]
+            curr_state = states[idx]
+            
+            # Mushroom collection (state 8 -> 9)
+            if prev_state == 8 and curr_state == 9:
+                powerup_count += 1
+            # Fire flower collection (state 8 -> 12)
+            elif prev_state == 8 and curr_state == 12:
+                powerup_count += 1
+        
         return powerup_count
-    except KeyError:
+    except (KeyError, IndexError):
+        return None
+
+
+def count_star_power_activations(repetition_variables):
+    """Count times star power was activated (star_power_timer goes from 0 to >0)."""
+    try:
+        if "star_power_timer" not in repetition_variables:
+            return None
+        
+        timer = repetition_variables["star_power_timer"]
+        activations = 0
+        
+        for idx in range(1, len(timer)):
+            if timer[idx - 1] == 0 and timer[idx] > 0:
+                activations += 1
+        
+        return activations
+    except (KeyError, IndexError):
         return None
 
 
@@ -181,6 +291,34 @@ def _safe_diff(variables, key):
     return None
 
 
+def _get_final_timer(repetition_variables):
+    """Get the final timer value as a combined integer (e.g., 245 for 2:45)."""
+    try:
+        hundreds = _safe_get_last(repetition_variables, "level_timer_hundreds") or 0
+        tens = _safe_get_last(repetition_variables, "level_timer_tens") or 0
+        ones = _safe_get_last(repetition_variables, "level_timer_ones") or 0
+        return hundreds * 100 + tens * 10 + ones
+    except:
+        return None
+
+
+def _get_final_powerup_state(repetition_variables):
+    """
+    Get the final powerup state as a human-readable string.
+    
+    player_powerup values:
+    0 = Small, 1 = Big, 2 = Fire
+    """
+    try:
+        powerup = _safe_get_last(repetition_variables, "player_powerup")
+        if powerup is not None:
+            powerup_names = {0: "small", 1: "big", 2: "fire"}
+            return powerup_names.get(powerup, f"unknown_{powerup}")
+    except:
+        pass
+    return None
+
+
 def create_sidecar_dict(repetition_variables):
     """
     Create JSON sidecar metadata from replay variables.
@@ -192,18 +330,14 @@ def create_sidecar_dict(repetition_variables):
         repetition_variables: Dictionary with per-frame game variables
 
     Returns:
-        Dictionary with summary statistics for the replay
+        Dictionary with comprehensive summary statistics for the replay
     """
-    # Calculate world/level - these should always be available
+    # Calculate duration based on score frames
     try:
-        world, level = _calculate_world_and_level(repetition_variables["level"])
+        n_frames = len(repetition_variables["score"])
+        duration = n_frames / 60
     except KeyError:
-        world, level = None, None
-
-    # Calculate duration based on score frames (fallback to None)
-    try:
-        duration = len(repetition_variables["score"]) / 60
-    except KeyError:
+        n_frames = None
         duration = None
 
     # Calculate distance and speed
@@ -212,29 +346,49 @@ def create_sidecar_dict(repetition_variables):
     if distance is not None and duration is not None and duration > 0:
         average_speed = distance / duration
 
-    # Build result dict with all available metrics
+    # Determine outcome
+    outcome = _determine_outcome(repetition_variables)
+
+    # Calculate lives lost
+    lives_start = _safe_get_first(repetition_variables, "lives")
+    lives_final = _safe_get_last(repetition_variables, "lives")
+    lives_lost = None
+    if lives_start is not None and lives_final is not None:
+        lives_lost = lives_start - lives_final
+
+    # Build comprehensive result dict
     result = {
-        "Subject": repetition_variables.get("subject"),
-        "World": world,
-        "Level": level,
-        "Duration": duration,
-        "Cleared": _check_level_cleared(repetition_variables),
-        "ScoreGained": _safe_diff(repetition_variables, "score"),
-        "X_Traveled": distance,
-        "Average_speed": average_speed,
-        "Lives_lost": None,
+        # === Timing ===
+        "Duration_seconds": round(duration, 3) if duration else None,
+        "Frame_count": n_frames,
+        "Timer_final": _get_final_timer(repetition_variables),
+        
+        # === Outcome ===
+        "Outcome": outcome,  # 'cleared', 'death', 'timeout', 'unknown'
+        
+        # === Score & Progression ===
+        "Score": _safe_diff(repetition_variables, "score"),
+        
+        # === Movement ===
+        "X_traveled": distance,
+        "Average_speed": round(average_speed, 2) if average_speed else None,
+        
+        # === Lives ===
+        "Lives_lost": lives_lost,
+        
+        # === Combat ===
         "Hits_taken": count_hits_taken(repetition_variables),
         "Enemies_killed": count_kills(repetition_variables),
+        
+        # === Items ===
+        "Coins": _safe_diff(repetition_variables, "coins"),
         "Powerups_collected": count_powerups_collected(repetition_variables),
+        "Stars_collected": count_star_power_activations(repetition_variables),
         "Bricks_destroyed": count_bricks_destroyed(repetition_variables),
-        "CoinsGained": _safe_diff(repetition_variables, "coins"),
+        
+        # === Player State ===
+        "Player_form_final": _get_final_powerup_state(repetition_variables),
     }
-
-    # Calculate lives lost if available
-    lives_first = _safe_get_first(repetition_variables, "lives")
-    lives_last = _safe_get_last(repetition_variables, "lives")
-    if lives_first is not None and lives_last is not None:
-        result["Lives_lost"] = lives_first - lives_last
 
     return result
 
@@ -337,7 +491,7 @@ def _build_output_paths(output_folder, bk2_file, subject, session):
 
     return {
         "mp4": op.join(gamelogs_folder, f"{entities}_recording.mp4"),
-        "json": op.join(gamelogs_folder, f"{entities}.json"),
+        "json": op.join(gamelogs_folder, f"{entities}_summary.json"),
         "variables": op.join(gamelogs_folder, f"{entities}_variables.json"),
         "lowlevel": op.join(gamelogs_folder, f"{entities}_lowlevel.npy"),
         "entities": entities,
@@ -392,11 +546,9 @@ def _create_and_save_sidecar(repetition_variables, task_metadata, paths):
         {
             "IndexInRun": task_metadata["idx_in_run"],
             "Run": task_metadata["run"],
-            "IndexGlobal": task_metadata["global_idx"],
-            "IndexLevel": task_metadata["level_idx"],
-            "Phase": task_metadata["phase"],
-            "LevelFullName": task_metadata["level"],
-            "Bk2File": paths["entities"],
+            "IndexGlobal": task_metadata["global_idx"] + 1,  # 1-indexed
+            "IndexLevel": task_metadata["level_idx"] + 1,  # 1-indexed
+            "Phase": "practice",  # Always practice for mariostars
         }
     )
 
