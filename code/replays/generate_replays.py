@@ -52,22 +52,42 @@ def _calculate_world_and_level(level_str):
     return None, None
 
 
+def _find_flag_frame(repetition_variables):
+    """Find the frame when flag was hit (coins_added_to_counter becomes non-zero).
+    
+    Returns None if no flag hit was detected.
+    """
+    coins_added = repetition_variables.get("coins_added_to_counter", [])
+    for i, c in enumerate(coins_added):
+        if c != 0:
+            return i
+    return None
+
+
 def _calculate_distance_traveled(repetition_variables):
-    """Calculate total X distance traveled using scroll positions."""
+    """Calculate total X distance traveled using scroll positions.
+    
+    Distance is calculated up to flag hit (if cleared) to avoid
+    including the finish animation movement.
+    """
     try:
+        # Find the effective end frame (flag hit or last frame)
+        flag_frame = _find_flag_frame(repetition_variables)
+        end_idx = flag_frame if flag_frame is not None else -1
+        
         # Use scroll_x_high and scroll_x_low if available
         if "scroll_x_high" in repetition_variables and "scroll_x_low" in repetition_variables:
             start_x = (repetition_variables["scroll_x_low"][0] +
                        (256 * repetition_variables["scroll_x_high"][0]))
-            end_x = (repetition_variables["scroll_x_low"][-1] +
-                     (256 * repetition_variables["scroll_x_high"][-1]))
+            end_x = (repetition_variables["scroll_x_low"][end_idx] +
+                     (256 * repetition_variables["scroll_x_high"][end_idx]))
             return end_x - start_x
         # Fallback to player position if scroll not available
         elif "player_x_low" in repetition_variables and "player_x_high" in repetition_variables:
             start_x = (repetition_variables["player_x_low"][0] +
                        (256 * repetition_variables["player_x_high"][0]))
-            end_x = (repetition_variables["player_x_low"][-1] +
-                     (256 * repetition_variables["player_x_high"][-1]))
+            end_x = (repetition_variables["player_x_low"][end_idx] +
+                     (256 * repetition_variables["player_x_high"][end_idx]))
             return end_x - start_x
     except (KeyError, IndexError):
         pass
@@ -76,38 +96,57 @@ def _calculate_distance_traveled(repetition_variables):
 
 def _determine_outcome(repetition_variables):
     """
-    Determine how the replay ended: 'cleared', 'death', 'timeout', or 'unknown'.
+    Determine how the replay ended: 'cleared' or 'failed/*'.
     
-    Uses player_action_state for death detection:
-    - State 10: Big Mario shrinks (powerup lost, not death)
-    - State 11: Mario death animation
+    Outcome values (consistent with mario3):
+    - cleared: Flag hit AND lives >= 0 at end
+    - failed/timeout: Timer reached 0
+    - failed/fall: Death by falling in pit (detected via player_action_state)
+    - failed/killed: Death by enemy or other cause
+    - unknown: Could not determine outcome
     
-    Also checks timer for timeout deaths.
+    Uses coins_added_to_counter to detect flag hit (level cleared).
+    Uses time_* variables for timeout detection (only when no flag hit).
     """
     try:
-        # Check if lives decreased (death occurred)
-        lives_start = repetition_variables["lives"][0]
+        # Get lives at end
         lives_end = repetition_variables["lives"][-1]
         
+        # Check if flag was hit (level cleared) - coins_added_to_counter becomes non-zero
+        coins_added = repetition_variables.get("coins_added_to_counter", [])
+        flag_hit = any(c != 0 for c in coins_added)
+        
+        # Cleared only if flag was hit AND lives >= 0 at end
+        if flag_hit and lives_end >= 0:
+            return "cleared"
+        
+        # No flag hit - check if lives decreased (death occurred)
+        lives_start = repetition_variables["lives"][0]
+        
         if lives_end < lives_start:
-            # Check if it was a timeout
-            if "level_timer_hundreds" in repetition_variables:
-                timer_h = repetition_variables["level_timer_hundreds"][-1]
-                timer_t = repetition_variables["level_timer_tens"][-1] if "level_timer_tens" in repetition_variables else 0
-                timer_o = repetition_variables["level_timer_ones"][-1] if "level_timer_ones" in repetition_variables else 0
+            # Check if it was a timeout using time_* variables at last frame
+            time_h = repetition_variables.get("time_hundreds", [])
+            time_t = repetition_variables.get("time_tens", [])
+            time_u = repetition_variables.get("time_units", [])
+            
+            if time_h and time_t and time_u:
+                timer_h = time_h[-1]
+                timer_t = time_t[-1]
+                timer_o = time_u[-1] // 1000  # time_units is scaled by 1000
                 if timer_h == 0 and timer_t == 0 and timer_o == 0:
-                    return "timeout"
-            return "death"
+                    return "failed/timeout"
+            
+            # Check for fall death vs killed:
+            # State 11 = death animation (killed by enemy)
+            # If life lost but state 11 never appears, it's a fall death (state stays at 8)
+            player_states = repetition_variables.get("player_action_state", [])
+            if 11 in player_states:
+                return "failed/killed"
+            else:
+                return "failed/fall"
         
-        # If lives didn't decrease, check if level was cleared
-        # Look for player_action_state transitions that indicate completion
-        if "player_action_state" in repetition_variables:
-            final_state = repetition_variables["player_action_state"][-1]
-            # State 11 is death, if that's not the final state and lives didn't decrease, likely cleared
-            if final_state != 11 and lives_end >= lives_start:
-                return "cleared"
-        
-        return "cleared"  # Default assumption if no death detected
+        # No flag hit but no death - unclear outcome
+        return "unknown"
         
     except (KeyError, IndexError):
         return "unknown"
@@ -169,13 +208,22 @@ def count_kills(repetition_variables):
     return _count_kills_via_sprite_state(repetition_variables)
 
 
-def count_bricks_destroyed(repetition_variables):
+def count_bricks_smashed(repetition_variables):
     """
-    Count bricks destroyed. In Mario Stars, brick breaking gives 50 points.
+    Count bricks smashed. In Mario All-Stars (SMB1), brick breaking gives 50 points.
+    
+    Only counts score increments BEFORE flag hit, since the 50-point increments
+    after flag hit are the time-to-score conversion during the finish animation.
     """
     try:
-        score_increments = list(np.diff(repetition_variables["score"]))
-        # In Mario Stars, brick breaking gives 50 points
+        score = repetition_variables["score"]
+        flag_frame = _find_flag_frame(repetition_variables)
+        
+        # Only count increments before flag hit
+        end_idx = flag_frame if flag_frame is not None else len(score)
+        score_increments = list(np.diff(score[:end_idx]))
+        
+        # In Mario All-Stars (SMB1), brick breaking gives 50 points
         return sum(1 for inc in score_increments if inc == 50)
     except KeyError:
         return None
@@ -292,11 +340,38 @@ def _safe_diff(variables, key):
 
 
 def _get_final_timer(repetition_variables):
-    """Get the final timer value as a combined integer (e.g., 245 for 2:45)."""
+    """Get the timer value at completion (flag hit) as a combined integer (e.g., 285 for 2:85).
+    
+    Uses time_hundreds, time_tens, and time_units variables.
+    Note: time_units is scaled by 1000, so divide by 1000 to get actual ones digit.
+    
+    The timer value is captured at the moment of flag hit (when coins_added_to_counter
+    becomes non-zero), since the timer quickly counts down to 0 after level completion.
+    If no flag hit is detected, returns the timer at the last frame.
+    """
     try:
-        hundreds = _safe_get_last(repetition_variables, "level_timer_hundreds") or 0
-        tens = _safe_get_last(repetition_variables, "level_timer_tens") or 0
-        ones = _safe_get_last(repetition_variables, "level_timer_ones") or 0
+        time_h = repetition_variables.get("time_hundreds", [])
+        time_t = repetition_variables.get("time_tens", [])
+        time_u = repetition_variables.get("time_units", [])
+        coins_added = repetition_variables.get("coins_added_to_counter", [])
+        
+        if not time_h or not time_t or not time_u:
+            return None
+        
+        # Find the frame when flag was hit (coins_added_to_counter becomes non-zero)
+        flag_frame = None
+        for i, c in enumerate(coins_added):
+            if c != 0:
+                flag_frame = i
+                break
+        
+        # Use flag frame if found, otherwise use last frame
+        idx = flag_frame if flag_frame is not None else -1
+        
+        hundreds = time_h[idx]
+        tens = time_t[idx]
+        ones = time_u[idx] // 1000  # time_units is scaled by 1000
+        
         return hundreds * 100 + tens * 10 + ones
     except:
         return None
@@ -340,11 +415,19 @@ def create_sidecar_dict(repetition_variables):
         n_frames = None
         duration = None
 
-    # Calculate distance and speed
+    # Calculate distance and speed (using flag frame for proper gameplay duration)
     distance = _calculate_distance_traveled(repetition_variables)
+    flag_frame = _find_flag_frame(repetition_variables)
+    
+    # Use gameplay duration (up to flag hit) for speed calculation
+    if flag_frame is not None:
+        gameplay_duration = (flag_frame + 1) / 60  # +1 because frame is 0-indexed
+    else:
+        gameplay_duration = duration
+    
     average_speed = None
-    if distance is not None and duration is not None and duration > 0:
-        average_speed = distance / duration
+    if distance is not None and gameplay_duration is not None and gameplay_duration > 0:
+        average_speed = distance / gameplay_duration
 
     # Determine outcome
     outcome = _determine_outcome(repetition_variables)
@@ -384,7 +467,7 @@ def create_sidecar_dict(repetition_variables):
         "Coins": _safe_diff(repetition_variables, "coins"),
         "Powerups_collected": count_powerups_collected(repetition_variables),
         "Stars_collected": count_star_power_activations(repetition_variables),
-        "Bricks_destroyed": count_bricks_destroyed(repetition_variables),
+        "Bricks_smashed": count_bricks_smashed(repetition_variables),
         
         # === Player State ===
         "Player_form_final": _get_final_powerup_state(repetition_variables),
@@ -416,6 +499,11 @@ def get_passage_order(bk2_df):
     """
     Sort replays and assign global and level-specific indices.
 
+    Indices are all 1-indexed:
+    - idx_in_run: Position within the run (1, 2, 3, ...)
+    - global_idx: Position across all replays for that subject (1, 2, 3, ...)
+    - level_idx: Position across all replays of that level for that subject (1, 2, 3, ...)
+
     Args:
         bk2_df: DataFrame with replay data including 'bk2_file' column
 
@@ -430,12 +518,19 @@ def get_passage_order(bk2_df):
     ]
     bk2_df["level"] = [_extract_level_from_bk2(x) for x in bk2_df["bk2_file"].values]
 
+    # Convert idx_in_run to 1-indexed (it comes from enumerate which is 0-indexed)
+    bk2_df["idx_in_run"] = bk2_df["idx_in_run"] + 1
+
+    # Sort by subject, session, run, idx_in_run and assign global index (1-indexed)
     bk2_df = bk2_df.sort_values(["subject", "session", "run", "idx_in_run"]).assign(
-        global_idx=lambda x: x.groupby("subject").cumcount()
+        global_idx=lambda x: x.groupby("subject").cumcount() + 1
     )
+    
+    # Sort by subject, level, session, run, idx_in_run and assign level index (1-indexed)
     bk2_df = bk2_df.sort_values(
         ["subject", "level", "session", "run", "idx_in_run"]
-    ).assign(level_idx=lambda x: x.groupby(["subject", "level"]).cumcount())
+    ).assign(level_idx=lambda x: x.groupby(["subject", "level"]).cumcount() + 1)
+    
     return bk2_df.sort_values(["subject", "global_idx"])
 
 
@@ -546,8 +641,8 @@ def _create_and_save_sidecar(repetition_variables, task_metadata, paths):
         {
             "IndexInRun": task_metadata["idx_in_run"],
             "Run": task_metadata["run"],
-            "IndexGlobal": task_metadata["global_idx"] + 1,  # 1-indexed
-            "IndexLevel": task_metadata["level_idx"] + 1,  # 1-indexed
+            "IndexGlobal": task_metadata["global_idx"],  # Already 1-indexed
+            "IndexLevel": task_metadata["level_idx"],  # Already 1-indexed
             "Phase": "practice",  # Always practice for mariostars
         }
     )
@@ -664,19 +759,24 @@ def _collect_bk2_info_from_events(run_events_file):
         return []
 
     phase = _determine_phase(events_df)
-    bk2_files = events_df["stim_file"].values.tolist()
+    
+    # Filter to only rows with valid .bk2 stim_files BEFORE enumerating
+    # This ensures idx_in_run correctly counts only actual game repetitions
+    valid_bk2_mask = events_df["stim_file"].apply(
+        lambda x: isinstance(x, str) and ".bk2" in x
+    )
+    bk2_files = events_df.loc[valid_bk2_mask, "stim_file"].values.tolist()
 
     bk2_list = []
     for idx_in_run, bk2_file in enumerate(bk2_files):
-        if isinstance(bk2_file, str) and ".bk2" in bk2_file:
-            bk2_list.append(
-                {
-                    "bk2_file": bk2_file,
-                    "run": run,
-                    "idx_in_run": idx_in_run,
-                    "phase": phase,
-                }
-            )
+        bk2_list.append(
+            {
+                "bk2_file": bk2_file,
+                "run": run,
+                "idx_in_run": idx_in_run,
+                "phase": phase,
+            }
+        )
     return bk2_list
 
 
@@ -764,10 +864,13 @@ def main(args):
         logging.warning("No bk2 files found to process. Check your datapath and ensure events.tsv files exist.")
         return
 
+
     bk2_df = pd.DataFrame(bk2_list)
     bk2_df = get_passage_order(bk2_df)
 
-    tasks = [tuple(row) for row in bk2_df.values]
+    # Ensure explicit column order for task tuples to match process_bk2_file expectations
+    task_columns = ["bk2_file", "run", "idx_in_run", "phase", "subject", "session", "level", "global_idx", "level_idx"]
+    tasks = [tuple(row) for row in bk2_df[task_columns].values]
     logging.info(f"Found {len(tasks)} bk2 files to process.")
 
     n_jobs = os.cpu_count() if args.n_jobs == -1 else args.n_jobs

@@ -4,12 +4,12 @@ Generate annotated event files for the Mario Stars dataset from replay variables
 
 This script reads game variables from replay processing and generates detailed
 BIDS-compatible event files containing:
-  - Button press events (UP, DOWN, LEFT, RIGHT, A, B, L, R, X, Y, START, SELECT) ✅ AVAILABLE
-  - Kill events (stomp, impact) ✅ AVAILABLE via sprite_state_* transitions
-  - Hit events (powerup_lost, life_lost, fall, timeout) ✅ AVAILABLE via player_action_state
-  - Brick smashing events ✅ AVAILABLE via score increment of 50
-  - Coin collection events ✅ AVAILABLE via coins variable
-  - Powerup collection events (mushroom, fire_flower, star) ✅ AVAILABLE
+  - Button press events (UP, DOWN, LEFT, RIGHT, A, B, L, R, X, Y, START, SELECT)
+  - Kill events (stomp, impact) via sprite_state_* transitions
+  - Hit events (powerup_lost, life_lost, fall, timeout) via player_action_state
+  - Brick smashing events via score increment of 50
+  - Coin collection events via coins variable
+  - Powerup collection events (mushroom, fire_flower, star)
 
 Usage:
     python generate_annotations.py
@@ -29,7 +29,9 @@ Hit Detection:
   Hit events are detected via player_action_state transitions:
   - State transition TO 10: powerup_lost (Big Mario shrinks)
   - State transition TO 11: life_lost (small Mario hit) or timeout (if timer=000)
-  - Lives decrease without state change: fall (fell into pit)
+  - Lives decrease without state change in last 5s: fall (fell into pit)
+    Note: Falls are timestamped 5 seconds earlier than when lives decrease,
+    because the lives variable updates several seconds after the actual fall.
 
 Powerup Detection:
   Powerup events are detected via player_action_state transitions:
@@ -78,7 +80,7 @@ def create_runevents(runvars, run_id, events_dataframe, FS=60):
             # Actions - button inputs are always available from replay file
             # SNES has: D-pad (UP, DOWN, LEFT, RIGHT), Face buttons (A, B, X, Y),
             # Shoulder buttons (L, R), and START/SELECT
-            ACTIONS = ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "X", "Y", "L", "R", "START", "SELECT"]
+            ACTIONS = ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "X", "Y", "START", "SELECT"] # ["L", "R"]
             for act in ACTIONS:
                 temp_df = generate_key_events(repvars, act, FS=FS)
                 temp_df["onset"] = temp_df["onset"] + repvars["rep_onset"]
@@ -114,6 +116,20 @@ def create_runevents(runvars, run_id, events_dataframe, FS=60):
             temp_df["onset"] = temp_df["onset"] + repvars["rep_onset"]
             temp_df["rep_index"] = rep_index
             all_df.append(temp_df)
+
+            # Star power (duration event)
+            temp_df = generate_star_events(repvars, FS=FS)
+            if not temp_df.empty:
+                temp_df["onset"] = temp_df["onset"] + repvars["rep_onset"]
+                temp_df["rep_index"] = rep_index
+                all_df.append(temp_df)
+
+            # Level complete
+            temp_df = generate_level_complete_events(repvars, FS=FS)
+            if not temp_df.empty:
+                temp_df["onset"] = temp_df["onset"] + repvars["rep_onset"]
+                temp_df["rep_index"] = rep_index
+                all_df.append(temp_df)
 
     try:
         events_df = pd.concat(all_df).sort_values(by="onset").reset_index(drop=True)
@@ -173,7 +189,15 @@ def generate_key_events(repvars, key, FS=60):
     onset = presses
     level = [repvars["level"] for x in onset]
     duration = [round(releases[i] - presses[i], 3) for i in range(len(presses))]
-    trial_type = ["{}".format(key) for i in range(len(presses))]
+
+    
+    event_name = key
+    if key == "Y":
+        event_name = "RUN/THROW"
+    elif key == "B":
+        event_name = "JUMP"
+        
+    trial_type = ["{}".format(event_name) for i in range(len(presses))]
     events_df = pd.DataFrame(
         data={
             "onset": onset,
@@ -270,9 +294,20 @@ def generate_hits_taken_events(repvars, FS=60):
 
     Hit types detected:
     - Hit/powerup_lost: player_action_state transitions TO 10
-    - Hit/life_lost: player_action_state transitions TO 11 AND lives decrease
-                     (excludes timeout deaths by checking timer)
-    - Hit/fall: lives decrease without state 10/11 transition (fell in pit)
+    - Hit/killed: player_action_state transitions TO 11 AND timer > 0
+                  (excludes timeout deaths by checking timer)
+    - Hit/timeout: player_action_state transitions TO 11 AND timer == 0
+    - Hit/fall: lives decrease without hit event in previous 5 seconds
+    
+    Note on Hit/fall detection:
+    When Mario is killed by an enemy (Hit/killed), the lives variable decreases
+    several seconds AFTER the death event (after the death animation plays).
+    To avoid false Hit/fall events:
+    - When lives decrease, look back 5 seconds for any Hit/killed, Hit/timeout, 
+      or Hit/powerup_lost event
+    - If found: don't register a fall (it's the delayed lives decrease from that hit)
+    - If not found: register a genuine fall, but with onset 5 seconds earlier
+      (because the actual fall happened ~5 seconds before lives decreased)
 
     Parameters
     ----------
@@ -326,19 +361,19 @@ def generate_hits_taken_events(repvars, FS=60):
             if prev_state != 11 and curr_state == 11:
                 # Check if this is a timeout death by checking if timer is at 0
                 is_timeout = False
-                if "level_timer_hundreds" in repvars and "level_timer_tens" in repvars and "level_timer_ones" in repvars:
-                    timer_h = repvars["level_timer_hundreds"][frame_idx]
-                    timer_t = repvars["level_timer_tens"][frame_idx]
-                    timer_o = repvars["level_timer_ones"][frame_idx]
-                    # Timer at 000 means timeout
-                    if timer_h == 0 and timer_t == 0 and timer_o == 0:
-                        is_timeout = True
+                #if "level_timer_hundreds" in repvars and "level_timer_tens" in repvars and "level_timer_ones" in repvars:
+                timer_h = repvars["time_hundreds"][frame_idx]
+                timer_t = repvars["time_tens"][frame_idx]
+                timer_o = repvars["time_units"][frame_idx]
+                # Timer at 000 means timeout
+                if timer_h == 0 and timer_t == 0 and timer_o == 0:
+                    is_timeout = True
 
                 if not is_timeout:
                     # This is a genuine hit death (small Mario hit by enemy)
                     onset.append(frame_idx / FS)
                     duration.append(0)  # Instantaneous event
-                    trial_type.append("Hit/life_lost")
+                    trial_type.append("Hit/killed")
                     level.append(repvars["level"])
                     frame_start.append(frame_idx)
                     frame_stop.append(frame_idx)
@@ -355,27 +390,43 @@ def generate_hits_taken_events(repvars, FS=60):
 
     # Fall deaths: lives decrease without a corresponding action_state hit
     # This catches deaths from falling into pits
+    # 
+    # IMPORTANT: When Mario is killed by an enemy, the lives variable decreases
+    # several seconds AFTER the Hit/killed event (after the death animation).
+    # This can cause false Hit/fall events. To fix this:
+    # - Look back 5 seconds (300 frames) for a Hit/killed event
+    # - If Hit/killed found: don't register the fall (it's a false positive)
+    # - If no Hit/killed: register the fall, but with onset 5 seconds earlier
+    #   (because the actual fall happened ~5 seconds before lives decreased)
+    LOOKBACK_SECONDS = 5
+    LOOKBACK_FRAMES = int(LOOKBACK_SECONDS * FS)  # 300 frames at 60fps
+    
     if has_lives:
         for frame_idx in range(1, n_frames_total):
             prev_lives = repvars["lives"][frame_idx - 1]
             curr_lives = repvars["lives"][frame_idx]
 
             if curr_lives < prev_lives:
-                # Check if we already recorded a hit at this frame (within a small window)
-                # Look for hit events in a window around this frame
-                window_size = 30  # Half second window at 60fps
-                has_nearby_hit = any(
-                    abs(frame_idx - hf) <= window_size for hf in hit_frames
+                # Check if there's a Hit/killed in the previous 5 seconds
+                # hit_frames contains frames where Hit/killed, Hit/powerup_lost, 
+                # or Hit/timeout was detected
+                has_killed_in_lookback = any(
+                    (frame_idx - LOOKBACK_FRAMES) <= hf <= frame_idx 
+                    for hf in hit_frames
                 )
 
-                if not has_nearby_hit:
-                    # This is a fall death (no action_state transition detected)
-                    onset.append(frame_idx / FS)
+                if not has_killed_in_lookback:
+                    # This is a genuine fall death
+                    # Adjust onset to 5 seconds earlier (when the fall actually happened)
+                    adjusted_frame = max(0, frame_idx - LOOKBACK_FRAMES)
+                    onset.append(adjusted_frame / FS)
                     duration.append(0)
                     trial_type.append("Hit/fall")
                     level.append(repvars["level"])
-                    frame_start.append(frame_idx)
-                    frame_stop.append(frame_idx)
+                    frame_start.append(adjusted_frame)
+                    frame_stop.append(adjusted_frame)
+                # If has_killed_in_lookback is True, we skip registering the fall
+                # because it's a false positive from the lives decrease after enemy kill
 
     events_df = pd.DataFrame(
         data={
@@ -415,10 +466,23 @@ def generate_bricks_smashed_events(repvars, FS=60):
     frame_start = []
     frame_stop = []
 
+    # Find flag hit frame (when coins_added_to_counter becomes non-zero)
+    # After flag hit, 50-point score increments are time-to-score conversion, not bricks
+    flag_frame = None
+    if "coins_added_to_counter" in repvars:
+        for i, c in enumerate(repvars["coins_added_to_counter"]):
+            if c != 0:
+                flag_frame = i
+                break
+
     # Check if score variable exists
     if "score" in repvars:
         score_increments = list(np.diff(repvars["score"]))
         for frame_idx, inc in enumerate(score_increments):
+            # Skip frames after flag hit (those are time-to-score conversions)
+            if flag_frame is not None and frame_idx >= flag_frame:
+                continue
+            
             # Brick smashing gives 50 points in Super Mario All-Stars
             if inc == 50:
                 onset.append((frame_idx + 1) / FS)  # +1 because diff shifts by 1
@@ -495,7 +559,7 @@ def generate_powerup_events(repvars, FS=60):
     - Transition 8 → 9: Mushroom collected (small Mario grows to big Mario)
     - Transition 8 → 12: Fire Flower collected (big Mario gets fire power)
 
-    Note: Star collection could be detected via star_power_timer increasing from 0.
+    Both are reported as Powerup_collected for consistency with other games.
 
     Parameters
     ----------
@@ -528,7 +592,7 @@ def generate_powerup_events(repvars, FS=60):
             if prev_state == 8 and curr_state == 9:
                 onset.append(frame_idx / FS)
                 duration.append(0)  # Instantaneous event
-                trial_type.append("Powerup/mushroom")
+                trial_type.append("Powerup_collected")
                 level.append(repvars["level"])
                 frame_start.append(frame_idx)
                 frame_stop.append(frame_idx)
@@ -537,25 +601,159 @@ def generate_powerup_events(repvars, FS=60):
             elif prev_state == 8 and curr_state == 12:
                 onset.append(frame_idx / FS)
                 duration.append(0)  # Instantaneous event
-                trial_type.append("Powerup/fire_flower")
+                trial_type.append("Powerup_collected")
                 level.append(repvars["level"])
                 frame_start.append(frame_idx)
                 frame_stop.append(frame_idx)
 
-    # Star: detected via star_power_timer increasing from 0
-    if "star_power_timer" in repvars:
-        for frame_idx in range(1, n_frames_total):
-            prev_timer = repvars["star_power_timer"][frame_idx - 1]
-            curr_timer = repvars["star_power_timer"][frame_idx]
+    events_df = pd.DataFrame(
+        data={
+            "onset": onset,
+            "duration": duration,
+            "trial_type": trial_type,
+            "level": level,
+            "frame_start": frame_start,
+            "frame_stop": frame_stop,
+        }
+    )
+    return events_df
 
-            # Star collected: timer goes from 0 to > 0
-            if prev_timer == 0 and curr_timer > 0:
-                onset.append(frame_idx / FS)
-                duration.append(0)
-                trial_type.append("Powerup/star")
-                level.append(repvars["level"])
-                frame_start.append(frame_idx)
-                frame_stop.append(frame_idx)
+
+def generate_star_events(repvars, FS=60):
+    """Generate events for star power activation.
+
+    Detected by star_power_timer going from 0 to >0.
+    This is a duration event that tracks the entire period of invincibility.
+
+    Parameters
+    ----------
+    repvars : dict
+        Dictionary containing all the variables of a single repetition
+    FS : int
+        The sampling rate of the .bk2 file (default: 60)
+
+    Returns
+    -------
+    events_df : pandas.DataFrame
+        Events DataFrame in BIDS-compatible format
+    """
+    onset = []
+    duration = []
+    trial_type = []
+    level = []
+    frame_start = []
+    frame_stop = []
+
+    if "star_power_timer" not in repvars:
+        return pd.DataFrame(
+            data={
+                "onset": onset,
+                "duration": duration,
+                "trial_type": trial_type,
+                "level": level,
+                "frame_start": frame_start,
+                "frame_stop": frame_stop,
+            }
+        )
+
+    timer = repvars["star_power_timer"]
+
+    # Detect contiguous blocks where timer > 0
+    in_event = False
+    event_start_idx = 0
+
+    for idx in range(len(timer)):
+        val = timer[idx]
+
+        if val > 0 and not in_event:
+            # Event started
+            in_event = True
+            event_start_idx = idx
+
+        elif val == 0 and in_event:
+            # Event ended
+            in_event = False
+            onset.append(event_start_idx / FS)
+            dur = (idx - event_start_idx) / FS
+            duration.append(dur)
+            trial_type.append("Star_activated")
+            level.append(repvars["level"])
+            frame_start.append(event_start_idx)
+            frame_stop.append(idx)
+
+    # Handle case where event goes until end of replay
+    if in_event:
+        idx = len(timer)
+        onset.append(event_start_idx / FS)
+        dur = (idx - event_start_idx) / FS
+        duration.append(dur)
+        trial_type.append("Star_activated")
+        level.append(repvars["level"])
+        frame_start.append(event_start_idx)
+        frame_stop.append(idx)
+
+    events_df = pd.DataFrame(
+        data={
+            "onset": onset,
+            "duration": duration,
+            "trial_type": trial_type,
+            "level": level,
+            "frame_start": frame_start,
+            "frame_stop": frame_stop,
+        }
+    )
+    return events_df
+
+
+def generate_level_complete_events(repvars, FS=60):
+    """Generate events for level completion.
+
+    Super Mario All-Stars (SMB1) level completion is detected when
+    coins_added_to_counter becomes non-zero, which indicates the flag was hit.
+
+    Parameters
+    ----------
+    repvars : dict
+        Dictionary containing all the variables of a single repetition
+    FS : int
+        The sampling rate of the .bk2 file (default: 60)
+
+    Returns
+    -------
+    events_df : pandas.DataFrame
+        Events DataFrame in BIDS-compatible format
+    """
+    onset = []
+    duration = []
+    trial_type = []
+    level = []
+    frame_start = []
+    frame_stop = []
+
+    if "coins_added_to_counter" not in repvars:
+        return pd.DataFrame(
+            data={
+                "onset": onset,
+                "duration": duration,
+                "trial_type": trial_type,
+                "level": level,
+                "frame_start": frame_start,
+                "frame_stop": frame_stop,
+            }
+        )
+
+    coins_added = repvars["coins_added_to_counter"]
+
+    # Detect transition from 0 to positive value (flag hit)
+    for idx in range(1, len(coins_added)):
+        if coins_added[idx - 1] == 0 and coins_added[idx] > 0:
+            onset.append(idx / FS)
+            duration.append(0)
+            trial_type.append("Level_complete")
+            level.append(repvars["level"])
+            frame_start.append(idx)
+            frame_stop.append(idx)
+            break  # Only one level complete event per repetition
 
     events_df = pd.DataFrame(
         data={
@@ -676,10 +874,8 @@ def main(args):
                                         int(len(repvars["score"])) / FS
                                     )
 
-                                    # rename index column to rep_index
-                                    events_dataframe.rename(
-                                        columns={"index": "rep_index"}, inplace=True
-                                    )
+                                    # rename index column to rep_index and ensure 1-based sequential
+                                    events_dataframe["rep_index"] = range(1, len(events_dataframe) + 1)
 
                                     runvars.append(repvars)
                                 else:
@@ -690,15 +886,8 @@ def main(args):
                                 print("Missing file, skipping")
                                 runvars.append({})
 
-                        # Add phase (discovery VS practice)
-                        if (
-                            events_dataframe["level"].values[0]
-                            == events_dataframe["level"].values[1]
-                        ):
-                            phase = "discovery"
-                        else:
-                            phase = "practice"
-                        events_dataframe["phase"] = phase
+                        # Mariostars is always practice phase
+                        events_dataframe["phase"] = "practice"
                         events_df = create_runevents(
                             runvars, run_id, events_dataframe, FS=FS
                         )

@@ -1,79 +1,32 @@
 # Mario Stars Annotations Generator
 
-This script generates BIDS-compatible annotated event files (`*_desc-annotated_events.tsv`) for the Super Mario All-Stars dataset. It reads pre-processed game variables and computes detailed annotations for all gameplay events including button presses, enemy kills, hits taken, item collection, and more.
+Generates BIDS-compatible `*_desc-annotated_events.tsv` files from pre-processed game variables.
 
-**IMPORTANT NOTE**: This script contains placeholder logic that needs to be updated once the `data.json` file for Super Mario All-Stars becomes available. All game-specific event detection logic is marked with `TODO` comments and should be verified against actual game variables.
+## Prerequisites & Installation
 
-## Prerequisites
-
-- Python 3.8 or higher
-- The Mario Stars dataset with `.bk2` replay files
-- **Replays must be processed first** using `code/replays/create_replays.py` to generate `*_variables.json` files
-- ROM files in the `stimuli/` directory
-
-## Installation
-
-### 1. Create a Python virtual environment
-
-From the root directory of the mariostars repository:
-
-```bash
-python -m venv env
-```
-
-### 2. Activate the environment
-
-```bash
-source env/bin/activate  # On Linux/Mac
-# OR
-env\Scripts\activate  # On Windows
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r code/annotations/requirements.txt
-```
-
-This will install:
-- numpy
-- pandas
-- stable-retro
+1.  **Environment**: Python 3.8+, Mariostars dataset (with `.bk2` replays).
+2.  **Replays must be processed first** using `code/replays/generate_replays.py` to generate `*_variables.json` files.
+3.  **Setup**:
+    ```bash
+    python -m venv env
+    source env/bin/activate
+    pip install -r code/annotations/requirements.txt
+    ```
 
 ## Usage
 
-### Basic Usage
-
-From the root directory of the mariostars repository:
-
 ```bash
-python code/annotations/generate_annotations.py --datapath .
+python code/annotations/generate_annotations.py
 ```
 
-This will:
-- Scan all `*_events.tsv` files in the dataset
-- Load corresponding replay variables from `gamelogs/*_variables.json`
-- Generate `*_desc-annotated_events.tsv` files with detailed event annotations
-
-### Options
-
-```bash
-# Specify a custom data path
-python code/annotations/generate_annotations.py --datapath /path/to/mariostars
-
-# Custom output path
-python code/annotations/generate_annotations.py --datapath . --output_path /path/to/output
-
-# Filter by subject
-python code/annotations/generate_annotations.py --datapath . --subjects sub-01 sub-02
-
-# Filter by session
-python code/annotations/generate_annotations.py --datapath . --sessions ses-001 ses-002
-```
+### Arguments
+-   `--datapath`: Root directory of the dataset.
+-   `--output_path`: Custom output path.
+-   `--subjects`, `--sessions`: Filter processing.
 
 ## Generated Annotations
 
-The script produces `*_desc-annotated_events.tsv` files with the following structure:
+The script produces BIDS-compatible `*_desc-annotated_events.tsv` files with the following structure:
 
 ### Column Order
 
@@ -86,130 +39,58 @@ The script produces `*_desc-annotated_events.tsv` files with the following struc
 | duration | Duration of the event in seconds (3 decimal places) |
 | frame_start | Frame index where event starts (integer) |
 | frame_stop | Frame index where event ends (integer) |
-| phase | "discovery" or "practice" (see below) |
+| phase | "discovery" or "practice" |
 
 ### Event Types
-
-**Note**: Button press events come from the replay file and are always available. Game state events require variables from `data.json` which are mostly missing.
 
 #### Repetition Events
 - `gym-retro_game` - Base repetition events from the original events file
 
-#### Button Press Events ✅ AVAILABLE
+#### Button Press Events
 Continuous events with onset and duration:
 - `UP`, `DOWN`, `LEFT`, `RIGHT` - D-pad directions
-- `A`, `B`, `X`, `Y` - Face buttons
-- `L`, `R` - Shoulder buttons (SNES)
-- `START` - Pause
-- `SELECT` - Mode select
-
-**Status**: Button inputs come from the .bk2 replay file itself (not data.json) and are always extracted automatically. All SNES buttons ARE generated!
+- `JUMP` - Jump button (A)
+- `RUN/THROW` - Run/fireball button (B)
+- `X`, `Y`, `L`, `R` - SNES face/shoulder buttons
+- `START`, `SELECT`
 
 #### Enemy Kill Events
 Instantaneous events (duration=0):
-- `Kill/stomp` - Jumping on enemy
-- `Kill/impact` - Shell or fireball hit
-- `Kill/kick` - Kicked shell
-- **TODO**: Verify kill types and values for Super Mario All-Stars
+- `Kill/stomp` - Jumping on enemy (sprite_state transition to 4 **Note:** Does note capture all the stomps - e.g. flying Koopas)
+- `Kill/impact` - Shell, fireball, or star kill (sprite_state transition to 34)
 
 #### Hit Events
 Instantaneous events (duration=0):
-- `Hit/powerup_lost` - Lost fire flower or super mushroom state
-- `Hit/life_lost` - Death
-- **TODO**: Verify powerstate threshold for Super Mario All-Stars
+- `Hit/powerup_lost` - Lost powerup state (player_action_state transition to 10)
+- `Hit/life_lost` - Death by enemy (player_action_state transition to 11)
+- `Hit/fall` - Death by falling in pit (lives decrease without state transition)
+- `Hit/timeout` - Death by timer running out
 
 #### Item Collection Events
+- `Coin_collected` (Instant): Coin counter increases
+- `Powerup_collected` (Instant): Mushroom or Fire Flower collected (action_state 8→9 or 8→12)
+- `Brick_smashed` (Instant): Brick destroyed (detected via score increment of 50)
+- `Star_activated` (Variable duration): Period where `star_power_timer` > 0
+
+#### Level Completion Events
 Instantaneous events (duration=0):
-- `Coin_collected` - Coin counter increases ✅ AVAILABLE (coins variable exists in data.json)
-- `Powerup_collected` - Super mushroom or fire flower collected ❌ Requires player_state
-- `Brick_smashed` - Brick destroyed by jumping ❌ Requires jump_airborne and score tracking
+- `Level_complete` - Flag hit (detected via coins_added_to_counter becoming non-zero)
 
 ### Phase Information
 
-Each run is classified as:
+Each run was performed in one of these two phases:
 - **discovery**: Single level repeated multiple times (practice/training)
 - **practice**: Multiple different levels in sequence (testing)
 
-## Current Status: What Works Now
+### RAM Variables Available in data.json
 
-### ✅ Currently Working Events
-Based on available data from replay files and incomplete data.json:
-- **All button press events** (UP, DOWN, LEFT, RIGHT, A, B, X, Y, L, R, START, SELECT) - from replay file
-- **Coin collection events** - `coins` variable exists in data.json
-- **Life loss events** - `lives` variable exists in data.json
-
-### ❌ Not Yet Working Events
-Require missing RAM variables from data.json:
-- **Enemy kills** - Requires enemy_kill30-35 variables
-- **Powerup loss** - Requires powerstate variable
-- **Powerup collection** - Requires player_state variable
-- **Brick smashing** - Requires jump_airborne and score tracking variables
-
-## Placeholder Logic - Requires Complete Data.json
-
-The following sections of the code contain placeholder logic that **must be updated** once the `data.json` file for Super Mario All-Stars is available:
-
-### 1. Enemy Kill Detection
-- **Location**: `generate_kill_events()` function
-- **Current**: Assumes 6 enemy slots with values 4 (stomp), 34 (impact), 132 (kick)
-- **TODO**: Verify enemy slot count, variable names, and kill type values
-
-### 2. Hit Detection
-- **Location**: `generate_hits_taken_events()` function
-- **Current**: Powerup loss threshold is -10000
-- **TODO**: Verify powerstate change threshold for All-Stars
-
-### 3. Brick Destruction
-- **Location**: `generate_bricks_smashed_events()` function
-- **Current**: Detects score increment of 5 points while airborne
-- **TODO**: Verify score increment value for All-Stars (may vary by game)
-
-### 4. Powerup Collection
-- **Location**: `generate_powerup_events()` function
-- **Current**: Detects player_state values [9, 12, 13]
-- **TODO**: Verify player_state values for powerup animation
-
-## Dependencies
-
-This script requires that replays have been processed first:
-
-```bash
-# First, process replays to generate variables
-python code/replays/create_replays.py --datapath .
-
-# Then run annotations
-python code/annotations/generate_annotations.py --datapath .
-```
-
-## Troubleshooting
-
-### "Variables file not found" errors
-- Ensure you've run `code/replays/create_replays.py` first
-- Check that `gamelogs/*_variables.json` files exist for each .bk2 file
-
-### "No bk2 files available for this run"
-- Normal if a run has no valid .bk2 files (all marked as "Missing file")
-
-### ROM/stimuli errors
-- Verify that `stimuli/SuperMarioAllStars-Snes/` contains the ROM files
-
-### Already annotated files
-- The script skips files that already have annotated versions
-- To force regeneration, delete existing `*_desc-annotated_events.tsv` files
-
-### Expected event types in annotated files
-- You WILL see button press events (UP, DOWN, LEFT, RIGHT, A, B, X, Y, L, R, START, SELECT)
-- You WILL see coin collection events (Coin_collected)
-- You WILL see life loss events (Hit/life_lost)
-- You will NOT see enemy kills, powerup events, or brick smashing (requires missing data.json variables)
-- If button presses or coins are missing, check that _variables.json files were generated correctly
-
-## Next Steps
-
-Before running this script on your full dataset:
-
-1. Obtain the `data.json` file for Super Mario All-Stars
-2. Review all TODO comments in `generate_annotations.py`
-3. Update event detection logic based on actual game variables
-4. Test on a small subset of data to verify correctness
-5. Run on the full dataset once verified
+The current `data.json` file for Super Mario All-Stars includes:
+- `lives` - Player lives count
+- `score` - Current score
+- `coins` - Coin count
+- `player_powerup` - Mario's powerup state
+- `player_action_state` - Player action/animation state
+- `star_power_timer` - Star power timer
+- `sprite_state_0` through `sprite_state_7` - Enemy sprite states
+- `level_timer_*` - Time remaining
+- `player_x_*`, `player_y_*` - Player position
