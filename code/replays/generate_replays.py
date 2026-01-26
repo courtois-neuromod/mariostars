@@ -499,10 +499,10 @@ def get_passage_order(bk2_df):
     """
     Sort replays and assign global and level-specific indices.
 
-    Indices are all 1-indexed:
-    - idx_in_run: Position within the run (1, 2, 3, ...)
-    - global_idx: Position across all replays for that subject (1, 2, 3, ...)
-    - level_idx: Position across all replays of that level for that subject (1, 2, 3, ...)
+    Indices are all 0-indexed:
+    - idx_in_run: Position within the run (0, 1, 2, ...)
+    - global_idx: Position across all replays for that subject (0, 1, 2, ...)
+    - level_idx: Position across all replays of that level for that subject (0, 1, 2, ...)
 
     Args:
         bk2_df: DataFrame with replay data including 'bk2_file' column
@@ -518,18 +518,17 @@ def get_passage_order(bk2_df):
     ]
     bk2_df["level"] = [_extract_level_from_bk2(x) for x in bk2_df["bk2_file"].values]
 
-    # Convert idx_in_run to 1-indexed (it comes from enumerate which is 0-indexed)
-    bk2_df["idx_in_run"] = bk2_df["idx_in_run"] + 1
+    # idx_in_run is already 0-indexed from enumerate
 
-    # Sort by subject, session, run, idx_in_run and assign global index (1-indexed)
+    # Sort by subject, session, run, idx_in_run and assign global index (0-indexed)
     bk2_df = bk2_df.sort_values(["subject", "session", "run", "idx_in_run"]).assign(
-        global_idx=lambda x: x.groupby("subject").cumcount() + 1
+        global_idx=lambda x: x.groupby("subject").cumcount()
     )
     
-    # Sort by subject, level, session, run, idx_in_run and assign level index (1-indexed)
+    # Sort by subject, level, session, run, idx_in_run and assign level index (0-indexed)
     bk2_df = bk2_df.sort_values(
         ["subject", "level", "session", "run", "idx_in_run"]
-    ).assign(level_idx=lambda x: x.groupby(["subject", "level"]).cumcount() + 1)
+    ).assign(level_idx=lambda x: x.groupby(["subject", "level"]).cumcount())
     
     return bk2_df.sort_values(["subject", "global_idx"])
 
@@ -641,8 +640,8 @@ def _create_and_save_sidecar(repetition_variables, task_metadata, paths):
         {
             "IndexInRun": task_metadata["idx_in_run"],
             "Run": task_metadata["run"],
-            "IndexGlobal": task_metadata["global_idx"],  # Already 1-indexed
-            "IndexLevel": task_metadata["level_idx"],  # Already 1-indexed
+            "IndexGlobal": task_metadata["global_idx"],  # 0-indexed
+            "IndexLevel": task_metadata["level_idx"],  # 0-indexed
             "Phase": "practice",  # Always practice for mariostars
         }
     )
