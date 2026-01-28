@@ -53,13 +53,14 @@ def _calculate_world_and_level(level_str):
 
 
 def _find_flag_frame(repetition_variables):
-    """Find the frame when flag was hit (coins_added_to_counter becomes non-zero).
+    """Find the frame when flag was hit (player_action_state becomes 4).
     
+    State 4 corresponds to sliding down the flagpole.
     Returns None if no flag hit was detected.
     """
-    coins_added = repetition_variables.get("coins_added_to_counter", [])
-    for i, c in enumerate(coins_added):
-        if c != 0:
+    player_states = repetition_variables.get("player_action_state", [])
+    for i, state in enumerate(player_states):
+        if state == 4:
             return i
     return None
 
@@ -112,9 +113,9 @@ def _determine_outcome(repetition_variables):
         # Get lives at end
         lives_end = repetition_variables["lives"][-1]
         
-        # Check if flag was hit (level cleared) - coins_added_to_counter becomes non-zero
-        coins_added = repetition_variables.get("coins_added_to_counter", [])
-        flag_hit = any(c != 0 for c in coins_added)
+        # Check if flag was hit (level cleared) - player_action_state becomes 4 (flagpole slide)
+        player_states = repetition_variables.get("player_action_state", [])
+        flag_hit = 4 in player_states
         
         # Cleared only if flag was hit AND lives >= 0 at end
         if flag_hit and lives_end >= 0:
@@ -139,7 +140,6 @@ def _determine_outcome(repetition_variables):
             # Check for fall death vs killed:
             # State 11 = death animation (killed by enemy)
             # If life lost but state 11 never appears, it's a fall death (state stays at 8)
-            player_states = repetition_variables.get("player_action_state", [])
             if 11 in player_states:
                 return "failed/killed"
             else:
@@ -358,12 +358,8 @@ def _get_final_timer(repetition_variables):
         if not time_h or not time_t or not time_u:
             return None
         
-        # Find the frame when flag was hit (coins_added_to_counter becomes non-zero)
-        flag_frame = None
-        for i, c in enumerate(coins_added):
-            if c != 0:
-                flag_frame = i
-                break
+        # Find the frame when flag was hit
+        flag_frame = _find_flag_frame(repetition_variables)
         
         # Use flag frame if found, otherwise use last frame
         idx = flag_frame if flag_frame is not None else -1

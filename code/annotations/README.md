@@ -74,7 +74,7 @@ Instantaneous events (duration=0):
 
 #### Level Completion Events
 Instantaneous events (duration=0):
-- `Level_complete` - Flag hit (detected via coins_added_to_counter becoming non-zero)
+- `Level_complete` - Flag hit (detected via player_action_state becoming 1 - sliding down flagpole)
 
 ### Phase Information
 

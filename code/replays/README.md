@@ -42,7 +42,7 @@ All variables rely on RAM addresses defined in `stimuli/SuperMarioAllStars-Snes/
 | Variable | Source / Logic |
 | :--- | :--- |
 | **Duration** | Total replay duration in seconds. |
-| **Outcome** | `cleared` (flag hit & lives≥0), `failed/timeout` (timer=0), `failed/fall` (life lost, no state 11), `failed/killed` (life lost, state 11). |
+| **Outcome** | `cleared` (flag hit[state 4] & lives≥0), `failed/timeout` (timer=0), `failed/fall` (life lost, no state 11), `failed/killed` (life lost, state 11). |
 | **X_traveled** | Distance traveled to flag hit (or end if not cleared). |
 | **Enemies_killed** | Count of sprite_state transitions to kill states (4, 34). |
 | **Hits_taken** | Count of hit events (powerup loss, life loss, fall). |

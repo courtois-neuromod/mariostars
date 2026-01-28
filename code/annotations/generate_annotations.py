@@ -466,14 +466,14 @@ def generate_bricks_smashed_events(repvars, FS=60):
     frame_start = []
     frame_stop = []
 
-    # Find flag hit frame (when coins_added_to_counter becomes non-zero)
+    # Find flag hit frame
     # After flag hit, 50-point score increments are time-to-score conversion, not bricks
     flag_frame = None
-    if "coins_added_to_counter" in repvars:
-        for i, c in enumerate(repvars["coins_added_to_counter"]):
-            if c != 0:
-                flag_frame = i
-                break
+    player_states = repvars.get("player_action_state", [])
+    for i, state in enumerate(player_states):
+        if state == 4:
+            flag_frame = i
+            break
 
     # Check if score variable exists
     if "score" in repvars:
@@ -709,7 +709,7 @@ def generate_level_complete_events(repvars, FS=60):
     """Generate events for level completion.
 
     Super Mario All-Stars (SMB1) level completion is detected when
-    coins_added_to_counter becomes non-zero, which indicates the flag was hit.
+    player_action_state becomes 4 (sliding down the flagpole).
 
     Parameters
     ----------
@@ -730,7 +730,7 @@ def generate_level_complete_events(repvars, FS=60):
     frame_start = []
     frame_stop = []
 
-    if "coins_added_to_counter" not in repvars:
+    if "player_action_state" not in repvars:
         return pd.DataFrame(
             data={
                 "onset": onset,
@@ -742,11 +742,11 @@ def generate_level_complete_events(repvars, FS=60):
             }
         )
 
-    coins_added = repvars["coins_added_to_counter"]
+    player_states = repvars["player_action_state"]
 
-    # Detect transition from 0 to positive value (flag hit)
-    for idx in range(1, len(coins_added)):
-        if coins_added[idx - 1] == 0 and coins_added[idx] > 0:
+    # Detect first frame where player_action_state is 4 (flagpole slide)
+    for idx in range(len(player_states)):
+        if player_states[idx] == 4:
             onset.append(idx / FS)
             duration.append(0)
             trial_type.append("Level_complete")
