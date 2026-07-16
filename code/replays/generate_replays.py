@@ -104,8 +104,13 @@ def _determine_outcome(repetition_variables):
     - failed/timeout: Timer reached 0
     - failed/fall: Death by falling in pit (detected via player_action_state)
     - failed/killed: Death by enemy or other cause
-    - unknown: Could not determine outcome
-    
+    - incomplete/warp: no flag and no death, but the player was transported to a
+      different level (warp-zone pipe exit, e.g. W1-2 / W4-2): current_world or
+      current_level changed.
+    - incomplete/interrupted: no flag, no death, no warp -> recording ended
+      mid-level (scanner stopped / aborted run).
+    - unknown: Could not determine outcome (missing variables / parse error only)
+
     Uses coins_added_to_counter to detect flag hit (level cleared).
     Uses time_* variables for timeout detection (only when no flag hit).
     """
@@ -145,9 +150,20 @@ def _determine_outcome(repetition_variables):
             else:
                 return "failed/fall"
         
-        # No flag hit but no death - unclear outcome
-        return "unknown"
-        
+        # No flag hit and no death: distinguish a warp-zone pipe exit from an
+        # interrupted recording. A warp (W1-2 / W4-2 warp zones) transports the
+        # player to a different level -> current_world or current_level changes;
+        # an interrupted recording (scanner stopped / aborted run) does not.
+        cur_world = repetition_variables.get("current_world", [])
+        cur_level = repetition_variables.get("current_level", [])
+
+        def _changed(seq):
+            return isinstance(seq, list) and len(seq) > 1 and seq[0] != seq[-1]
+
+        if _changed(cur_world) or _changed(cur_level):
+            return "incomplete/warp"
+        return "incomplete/interrupted"
+
     except (KeyError, IndexError):
         return "unknown"
 
