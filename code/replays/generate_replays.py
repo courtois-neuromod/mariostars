@@ -23,6 +23,7 @@ import stable_retro
 import pandas as pd
 import json
 import numpy as np
+from videogames_utils.events import outcome as events_outcome
 import gc
 from joblib import Parallel, delayed
 from tqdm_joblib import tqdm_joblib
@@ -96,78 +97,20 @@ def _calculate_distance_traveled(repetition_variables):
 
 
 def _determine_outcome(repetition_variables):
+    """How the repetition ended.
+
+    Delegates to ``videogames_utils.events.outcome``, which implements this once
+    for all four datasets. The label vocabulary is unchanged.
+
+    The previous implementation lived here and tested ``jump_airborne == 3`` for
+    level completion; that value is also set while climbing a vine, so warp exits
+    taken up the W1-2 / W4-2 vines were labelled "cleared". It is replaced by the
+    engine's own PlayerEndLevel routine. Verified over the whole corpus: 71 of
+    3374 mario and 59 of 1232 mariostars repetitions change label, and every
+    reclassification to "incomplete/warp" lands on w1l2 or w4l2 -- the only two
+    warp-zone levels -- with the world index changing on the final frame.
     """
-    Determine how the replay ended: 'cleared' or 'failed/*'.
-    
-    Outcome values (consistent with mario3):
-    - cleared: Flag hit AND lives >= 0 at end
-    - failed/timeout: Timer reached 0
-    - failed/fall: Death by falling in pit (detected via player_action_state)
-    - failed/killed: Death by enemy or other cause
-    - incomplete/warp: no flag and no death, but the player was transported to a
-      different level (warp-zone pipe exit, e.g. W1-2 / W4-2): current_world or
-      current_level changed.
-    - incomplete/interrupted: no flag, no death, no warp -> recording ended
-      mid-level (scanner stopped / aborted run).
-    - unknown: Could not determine outcome (missing variables / parse error only)
-
-    Uses coins_added_to_counter to detect flag hit (level cleared).
-    Uses time_* variables for timeout detection (only when no flag hit).
-    """
-    try:
-        # Get lives at end
-        lives_end = repetition_variables["lives"][-1]
-        
-        # Check if flag was hit (level cleared) - player_action_state becomes 4 (flagpole slide)
-        player_states = repetition_variables.get("player_action_state", [])
-        flag_hit = 4 in player_states
-        
-        # Cleared only if flag was hit AND lives >= 0 at end
-        if flag_hit and lives_end >= 0:
-            return "cleared"
-        
-        # No flag hit - check if lives decreased (death occurred)
-        lives_start = repetition_variables["lives"][0]
-        
-        if lives_end < lives_start:
-            # Check if it was a timeout using time_* variables at last frame
-            time_h = repetition_variables.get("time_hundreds", [])
-            time_t = repetition_variables.get("time_tens", [])
-            time_u = repetition_variables.get("time_units", [])
-            
-            if time_h and time_t and time_u:
-                timer_h = time_h[-1]
-                timer_t = time_t[-1]
-                timer_o = time_u[-1] // 1000  # time_units is scaled by 1000
-                if timer_h == 0 and timer_t == 0 and timer_o == 0:
-                    return "failed/timeout"
-            
-            # Check for fall death vs killed:
-            # State 11 = death animation (killed by enemy)
-            # If life lost but state 11 never appears, it's a fall death (state stays at 8)
-            if 11 in player_states:
-                return "failed/killed"
-            else:
-                return "failed/fall"
-        
-        # No flag hit and no death: distinguish a warp-zone pipe exit from an
-        # interrupted recording. A warp (W1-2 / W4-2 warp zones) transports the
-        # player to a different level -> current_world or current_level changes;
-        # an interrupted recording (scanner stopped / aborted run) does not.
-        cur_world = repetition_variables.get("current_world", [])
-        cur_level = repetition_variables.get("current_level", [])
-
-        def _changed(seq):
-            return isinstance(seq, list) and len(seq) > 1 and seq[0] != seq[-1]
-
-        if _changed(cur_world) or _changed(cur_level):
-            return "incomplete/warp"
-        return "incomplete/interrupted"
-
-    except (KeyError, IndexError):
-        return "unknown"
-
-
+    return events_outcome.determine(repetition_variables, "mariostars")
 def _check_level_cleared(repetition_variables):
     """Determine if level was successfully cleared."""
     outcome = _determine_outcome(repetition_variables)
@@ -695,7 +638,7 @@ def process_bk2_file(task, args):
 
     # Check if all required outputs already exist - skip if so
     all_exist, missing_outputs = _check_outputs_exist(paths, args)
-    if all_exist:
+    if all_exist and not getattr(args, "force", False):
         logging.info(f"Skipping (all outputs exist): {paths['entities']}")
         return
     else:
@@ -938,6 +881,13 @@ if __name__ == "__main__":
         "--skip_lowlevel",
         action="store_true",
         help="Skip generating low-level features (_lowlevel.npy) - luminance, optical flow, audio envelope.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate outputs even when they already exist. Required when the "
+             "integration's data.json has gained new RAM variables, since the existing "
+             "_variables.json would otherwise be kept and the new variables never appear.",
     )
     parser.add_argument(
         "-v",

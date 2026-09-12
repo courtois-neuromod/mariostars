@@ -7,7 +7,7 @@ Participants *played levels from Super Mario All-Stars remake of SMB1 levels whi
 
 This subdataset is organized following the [brain imaging data structure (BIDS)](https://bids.neuroimaging.io/) (including extensions in development) and contains:
 - [x] [raw neuroimaging data](https://docs.cneuromod.ca/en/latest/MRI.html#functional-sequences)
-- [ ] behavioral variables in event files
+- [x] behavioral variables in event files
 - [ ] physiological data
   - [ ] ECG
   - [ ] pulse (photoplethysmography)
