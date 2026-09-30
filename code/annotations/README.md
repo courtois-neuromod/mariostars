@@ -55,14 +55,14 @@ repetition's `gamelogs/*_summary.json`, keyed by the `stim_file` of the containe
   cover it from its first frame to its last, so exactly one is active at any frame.
   `Screen/Gameplay` is the complement of the non-play screens (title card, death
   sequence, end-of-level sequence, transitions, game over).
-- **`Player_state/*` form rows** (Small, Super, Fire and the SMB3 suits; Normal in
+- **`PlayerState/*` form rows** (Small, Super, Fire and the SMB3 suits; Normal in
   Shinobi) are mutually exclusive and tile the frames on which the player is alive in the
-  level, i.e. outside `Screen/Death`, `Screen/Level_intro`, `Screen/Game_over` and
-  `Screen/Map`. The other `Player_state/*` rows (Star, Hit_recovery, Flying, ...) are
+  level, i.e. outside `Screen/Death`, `Screen/LevelIntro`, `Screen/GameOver` and
+  `Screen/Map`. The other `PlayerState/*` rows (Star, HitRecovery, Flying, ...) are
   overlays that can co-occur with a form.
 - Names are hierarchical: the part before the first `/` is the family. `{...}` in the
   table below is filled at generation time with a decoded object name, e.g.
-  `Enemy_on_screen/Goomba`.
+  `EnemyOnScreen/Goomba`.
 
 ## Event types
 
@@ -71,36 +71,36 @@ dataset. An entry with no rows says why.
 
 | Event | Rows | Description |
 |---|---|---|
-| `Player_damaged` | 341 | The player is hit and loses the current power-up state (Mario games) or health (Shinobi). |
-| `Player_died/Enemy` | 923 | The player dies after being hit by an enemy or another damaging object. |
-| `Player_died/Fall` (durational) | 498 | The player falls into a pit and dies. `onset` is the frame the player drops below the bottom of the screen and `duration` runs to the frame the life is actually lost, about 4 s later -- the game lets the player fall out of the level before resetting. |
-| `Player_died/Timeout` | *none: implemented (death routine with the timer at 0); no subject ever ran out of time* | The player dies because the level timer ran out. |
-| `Life_gained` | 242 | The player collects or earns an extra life. |
-| `Player_state/Small` (durational) | 2,802 | The player is small Mario: no power-up. Together with the other form rows this covers every frame on which the player is alive in the level. |
-| `Player_state/Super` (durational) | 861 | The player is Super (big) Mario, from the frame the mushroom is collected until hit, death or the end of the repetition. |
-| `Player_state/Fire` (durational) | 133 | The player is Fire Mario (can throw fireballs). |
-| `Player_state/Star` (durational) | 205 | Star invincibility is active. |
-| `Player_state/Hit_recovery` (durational) | 545 | Post-hit recovery: the player has just been damaged and blinks. In the Mario games nothing can hurt the player until it ends; in Shinobi it is the game's post-hit counter. |
-| `Item_on_screen/{item_type}` (durational) | 1,963 | A coin, mushroom, flower, star or extra life is visible on screen. `duration` spans the time it is visible. |
-| `Item_collected/Coin` | 15,017 | The player collects a coin. |
-| `Item_collected/Powerup` | *none: not implemented; the pickup is the first frame of the `Player_state/Super`, `Fire` or `Star` row it starts (a 1-up is `Life_gained`)* | The player collects a mushroom, flower, star or other power-up item. |
-| `Block_smashed` | 2,024 | The player destroys a breakable brick block from below. |
-| `Enemy_on_screen/{enemy_type}` (durational) | 36,187 | A specific enemy type is visible on screen. `duration` runs from the frame it becomes visible until it leaves the screen or is defeated; an enemy that leaves and returns produces two separate events. |
-| `Enemy_attack/{enemy_type}` | *none: not implemented (no verified RAM signal)* | An enemy begins an attack, such as firing a projectile or emerging from a pipe. |
-| `Enemy_defeated/Stomp/{enemy_type}` | 2,519 | The player defeats an enemy by jumping on it. |
-| `Enemy_defeated/Projectile/{enemy_type}` | 3,277 | The player defeats an enemy with a fireball or other projectile. |
-| `Enemy_defeated/Shell/{enemy_type}` | 205 | The player defeats an enemy using a moving shell. |
-| `Projectile_on_screen/{projectile_type}` (durational) | *none: implemented for Bowser's flames (id 0x15) but the flame never passes the visibility test; not yet resolved* | A fireball, Bullet Bill, hammer or other moving projectile is visible on screen. `duration` spans the time it is visible. |
-| `Shell_started_moving` | *none: not implemented for SMB1* | A shell begins moving after being kicked or otherwise activated. |
-| `Pipe_entered` | 350 | The player enters a pipe. |
-| `Checkpoint_reached` | *none: deliberately not emitted: `HalfwayPage` is written at a death past the midpoint, not at the crossing* | The player passes the level checkpoint that changes the restart position. |
-| `Flagpole_visible` | 873 | The flagpole at the end of the level becomes visible on screen. |
-| `Castle_visible` | 873 | The end-of-level castle becomes visible on screen. |
-| `Timer_warning_started` | 1,232 | The game begins warning the player that little time remains. |
-| `Level_started` | 1,232 | A new level or gameplay attempt begins. |
-| `Level_restarted` | *none: not applicable: an SMB1 repetition spans all its lives, and each restart is a `Screen/Level_intro` row* | The level restarts after the player dies. |
-| `Level_completed` | 883 | The player successfully finishes the level. In Shinobi this is the start of the end-of-level fade that closes the recording; it is missed in the few cleared repetitions whose recording stopped before the fade. |
-| `Level_exited/Warp` | 84 | The player left the level through a warp-zone pipe rather than finishing it. Not part of Event-Types.pdf; retained from the previous vocabulary. |
+| `PlayerDamaged` | 341 | The player is hit and loses the current power-up state (Mario games) or health (Shinobi). |
+| `PlayerDied/Enemy` | 923 | The player dies after being hit by an enemy or another damaging object. |
+| `PlayerDied/Fall` (durational) | 498 | The player falls into a pit and dies. `onset` is the frame the player drops below the bottom of the screen and `duration` runs to the frame the life is actually lost, about 4 s later -- the game lets the player fall out of the level before resetting. |
+| `PlayerDied/Timeout` | *none: implemented (death routine with the timer at 0); no subject ever ran out of time* | The player dies because the level timer ran out. |
+| `LifeGained` | 242 | The player collects or earns an extra life. |
+| `PlayerState/Small` (durational) | 2,802 | The player is small Mario: no power-up. Together with the other form rows this covers every frame on which the player is alive in the level. |
+| `PlayerState/Super` (durational) | 861 | The player is Super (big) Mario, from the frame the mushroom is collected until hit, death or the end of the repetition. |
+| `PlayerState/Fire` (durational) | 133 | The player is Fire Mario (can throw fireballs). |
+| `PlayerState/Star` (durational) | 205 | Star invincibility is active. |
+| `PlayerState/HitRecovery` (durational) | 545 | Post-hit recovery: the player has just been damaged and blinks. In the Mario games nothing can hurt the player until it ends; in Shinobi it is the game's post-hit counter. |
+| `ItemOnScreen/{item_type}` (durational) | 1,963 | A coin, mushroom, flower, star or extra life is visible on screen. `duration` spans the time it is visible. |
+| `ItemCollected/Coin` | 15,017 | The player collects a coin. |
+| `ItemCollected/Powerup` | *none: not implemented; the pickup is the first frame of the `PlayerState/Super`, `Fire` or `Star` row it starts (a 1-up is `LifeGained`)* | The player collects a mushroom, flower, star or other power-up item. |
+| `BlockSmashed` | 2,024 | The player destroys a breakable brick block from below. |
+| `EnemyOnScreen/{enemy_type}` (durational) | 36,187 | A specific enemy type is visible on screen. `duration` runs from the frame it becomes visible until it leaves the screen or is defeated; an enemy that leaves and returns produces two separate events. |
+| `EnemyAttack/{enemy_type}` | *none: not implemented (no verified RAM signal)* | An enemy begins an attack, such as firing a projectile or emerging from a pipe. |
+| `EnemyDefeated/Stomp/{enemy_type}` | 2,519 | The player defeats an enemy by jumping on it. |
+| `EnemyDefeated/Projectile/{enemy_type}` | 3,277 | The player defeats an enemy with a fireball or other projectile. |
+| `EnemyDefeated/Shell/{enemy_type}` | 205 | The player defeats an enemy using a moving shell. |
+| `ProjectileOnScreen/{projectile_type}` (durational) | *none: implemented for Bowser's flames (id 0x15) but the flame never passes the visibility test; not yet resolved* | A fireball, Bullet Bill, hammer or other moving projectile is visible on screen. `duration` spans the time it is visible. |
+| `ShellStartedMoving` | *none: not implemented for SMB1* | A shell begins moving after being kicked or otherwise activated. |
+| `PipeEntered` | 350 | The player enters a pipe. |
+| `CheckpointReached` | *none: deliberately not emitted: `HalfwayPage` is written at a death past the midpoint, not at the crossing* | The player passes the level checkpoint that changes the restart position. |
+| `FlagpoleVisible` | 873 | The flagpole at the end of the level becomes visible on screen. |
+| `CastleVisible` | 873 | The end-of-level castle becomes visible on screen. |
+| `TimerWarningStarted` | 1,232 | The game begins warning the player that little time remains. |
+| `LevelStarted` | 1,232 | A new level or gameplay attempt begins. |
+| `LevelRestarted` | *none: not applicable: an SMB1 repetition spans all its lives, and each restart is a `Screen/LevelIntro` row* | The level restarts after the player dies. |
+| `LevelCompleted` | 883 | The player successfully finishes the level. In Shinobi this is the start of the end-of-level fade that closes the recording; it is missed in the few cleared repetitions whose recording stopped before the fade. |
+| `LevelExited/Warp` | 84 | The player left the level through a warp-zone pipe rather than finishing it. Not part of Event-Types.pdf; retained from the previous vocabulary. |
 | `Action/Left` (durational) | 20,032 | The player holds the left direction. |
 | `Action/Right` (durational) | 37,082 | The player holds the right direction. |
 | `Action/Up` (durational) | 211 | The player holds the up direction. |
@@ -111,9 +111,9 @@ dataset. An entry with no rows says why.
 | `Action/Start` (durational) | *none: never pressed* | The player presses START (pauses the game). |
 | `Action/Select` (durational) | *none: never pressed* | The player presses SELECT / MODE. |
 | `Screen/Gameplay` (durational) | 2,735 | The player controls the character in the level. The Screen/* rows of a repetition partition it: exactly one is active at any frame, and this is the complement of all the others. |
-| `Screen/Level_intro` (durational) | 2,391 | The level's title card: Super Mario Bros.' black 'WORLD x-y / Mario x n' screen, shown when the level starts and again after each death before play resumes. mario3 and shinobi have no intro screen. |
+| `Screen/LevelIntro` (durational) | 2,391 | The level's title card: Super Mario Bros.' black 'WORLD x-y / Mario x n' screen, shown when the level starts and again after each death before play resumes. mario3 and shinobi have no intro screen. |
 | `Screen/Death` (durational) | 1,421 | The death sequence: from the frame the player dies, or drops off the bottom of the screen, to the end of the death animation and the freeze that follows it. The player has no control. |
-| `Screen/Level_end` (durational) | 883 | The end-of-level sequence after the level is completed: the flagpole slide, walk into the castle and time bonus (SMB1); the goal card and COURSE CLEAR screen (mario3); the ROUND CLEAR bonus tally (shinobi). The player has no control. |
+| `Screen/LevelEnd` (durational) | 883 | The end-of-level sequence after the level is completed: the flagpole slide, walk into the castle and time bonus (SMB1); the goal card and COURSE CLEAR screen (mario3); the ROUND CLEAR bonus tally (shinobi). The player has no control. |
 | `Screen/Transition` (durational) | 428 | A transition inside a level with no player control: pipe, vine or door travel and the black or fading screen while the next area loads (SMB1 pipes, vines and the exit from a bonus area; mario3 pipes and doors; shinobi section fades), and the fade back into play after a shinobi death. |
 | `gym-retro_game` (durational) | 1,232 | One repetition of gameplay (one .bk2 file). This is the container row that carries `stim_file`; all other events fall inside its window. |
 
@@ -127,11 +127,11 @@ dataset. An entry with no rows says why.
 - Visibility uses bit 0 of `sprite_onscreen_flag_*`. This port exposes no per-sprite
   coordinates, so the Piranha Plant and Bullet Bill refinements of the NES do not apply:
   a plant counts for its whole cycle and roughly 10% of Bullet Bill tracks are cannons.
-- **Three RAM variables were added** for the `Player_state/*` rows: `player_status`
+- **Three RAM variables were added** for the `PlayerState/*` rows: `player_status`
   ($0756), `injury_timer` ($07AE) and `star_timer` ($07AF). The shipped `player_powerup`
   ($0578) and `star_power_timer` ($0553) do **not** hold what their names say (values
   such as 82 and 107, constants rather than a countdown) and are no longer read.
-- The title card (`Screen/Level_intro`) is invisible to the engine variable on this port,
+- The title card (`Screen/LevelIntro`) is invisible to the engine variable on this port,
   which idles at 8 while the card is up. It is read from `OperMode_Task` ($0772), decoded
   out of the shipped `reset` variable (a 4-byte BCD read at $0771 whose second byte pair
   is that task; 1 = card, 3 = game routines). The port fades in and out around the card,
@@ -148,43 +148,75 @@ names need updating; the mapping for this game is:
 
 | Former | Now |
 |---|---|
-| `Brick_smashed` | `Block_smashed` |
-| `Coin_collected` | `Item_collected/Coin` |
+| `Block_smashed` | `BlockSmashed` |
+| `Brick_smashed` | `BlockSmashed` |
+| `Castle_visible` | `CastleVisible` |
+| `Checkpoint_reached` | `CheckpointReached` |
+| `Coin_collected` | `ItemCollected/Coin` |
 | `DOWN` | `Action/Down` |
-| `Enemy_appeared/{enemy_type}` | `Enemy_on_screen/{enemy_type}` |
-| `HealthLoss` | `Player_damaged` |
-| `Hit/fall` | `Player_died/Fall` |
-| `Hit/killed` | `Player_died/Enemy` |
-| `Hit/life_lost` | `Player_died/Enemy` |
-| `Hit/powerup_lost` | `Player_damaged` |
-| `Hit/timeout` | `Player_died/Timeout` |
-| `Item_appeared/{item_type}` | `Item_on_screen/{item_type}` |
+| `Enemy_appeared/{enemy_type}` | `EnemyOnScreen/{enemy_type}` |
+| `Enemy_attack/{enemy_type}` | `EnemyAttack/{enemy_type}` |
+| `Enemy_defeated/Projectile/{enemy_type}` | `EnemyDefeated/Projectile/{enemy_type}` |
+| `Enemy_defeated/Shell/{enemy_type}` | `EnemyDefeated/Shell/{enemy_type}` |
+| `Enemy_defeated/Stomp/{enemy_type}` | `EnemyDefeated/Stomp/{enemy_type}` |
+| `Enemy_on_screen/{enemy_type}` | `EnemyOnScreen/{enemy_type}` |
+| `Flagpole_visible` | `FlagpoleVisible` |
+| `HealthLoss` | `PlayerDamaged` |
+| `Hit/fall` | `PlayerDied/Fall` |
+| `Hit/killed` | `PlayerDied/Enemy` |
+| `Hit/life_lost` | `PlayerDied/Enemy` |
+| `Hit/powerup_lost` | `PlayerDamaged` |
+| `Hit/timeout` | `PlayerDied/Timeout` |
+| `Item_appeared/{item_type}` | `ItemOnScreen/{item_type}` |
+| `Item_collected/Coin` | `ItemCollected/Coin` |
+| `Item_collected/Powerup` | `ItemCollected/Powerup` |
+| `Item_on_screen/{item_type}` | `ItemOnScreen/{item_type}` |
 | `JUMP` | `Action/Jump` |
-| `Kill/impact` | `Enemy_defeated/Projectile/{enemy_type}` |
-| `Kill/kick` | `Enemy_defeated/Shell/{enemy_type}` |
-| `Kill/stomp` | `Enemy_defeated/Stomp/{enemy_type}` |
+| `Kill/impact` | `EnemyDefeated/Projectile/{enemy_type}` |
+| `Kill/kick` | `EnemyDefeated/Shell/{enemy_type}` |
+| `Kill/stomp` | `EnemyDefeated/Stomp/{enemy_type}` |
 | `LEFT` | `Action/Left` |
-| `Level_complete` | `Level_completed` |
+| `Level_complete` | `LevelCompleted` |
+| `Level_completed` | `LevelCompleted` |
+| `Level_exited/Warp` | `LevelExited/Warp` |
+| `Level_restarted` | `LevelRestarted` |
+| `Level_started` | `LevelStarted` |
+| `Life_gained` | `LifeGained` |
 | `MODE` | `Action/Select` |
-| `Powerup_collected` | `Item_collected/Powerup` |
-| `Powerup_expired/Star` | `Player_state/Star` |
-| `Powerup_started/Fire` | `Player_state/Fire` |
-| `Powerup_started/Star` | `Player_state/Star` |
-| `Powerup_started/Super` | `Player_state/Super` |
-| `Projectile_appeared/{projectile_type}` | `Projectile_on_screen/{projectile_type}` |
+| `Pipe_entered` | `PipeEntered` |
+| `Player_damaged` | `PlayerDamaged` |
+| `Player_died/Enemy` | `PlayerDied/Enemy` |
+| `Player_died/Fall` | `PlayerDied/Fall` |
+| `Player_died/Timeout` | `PlayerDied/Timeout` |
+| `Player_state/Fire` | `PlayerState/Fire` |
+| `Player_state/Hit_recovery` | `PlayerState/HitRecovery` |
+| `Player_state/Small` | `PlayerState/Small` |
+| `Player_state/Star` | `PlayerState/Star` |
+| `Player_state/Super` | `PlayerState/Super` |
+| `Powerup_collected` | `ItemCollected/Powerup` |
+| `Powerup_expired/Star` | `PlayerState/Star` |
+| `Powerup_started/Fire` | `PlayerState/Fire` |
+| `Powerup_started/Star` | `PlayerState/Star` |
+| `Powerup_started/Super` | `PlayerState/Super` |
+| `Projectile_appeared/{projectile_type}` | `ProjectileOnScreen/{projectile_type}` |
+| `Projectile_on_screen/{projectile_type}` | `ProjectileOnScreen/{projectile_type}` |
 | `RIGHT` | `Action/Right` |
 | `RUN/THROW` | `Action/Run` |
 | `SELECT` | `Action/Select` |
 | `START` | `Action/Start` |
-| `Star_activated` | `Player_state/Star` |
+| `Screen/Level_end` | `Screen/LevelEnd` |
+| `Screen/Level_intro` | `Screen/LevelIntro` |
+| `Shell_started_moving` | `ShellStartedMoving` |
+| `Star_activated` | `PlayerState/Star` |
+| `Timer_warning_started` | `TimerWarningStarted` |
 | `UP` | `Action/Up` |
-| `Warp` | `Level_exited/Warp` |
+| `Warp` | `LevelExited/Warp` |
 | `Enemy_disappeared/{enemy_type}` | *(dropped)* |
 
 The former `Powerup_started/*` and `Powerup_expired/*` point events became the
-durational `Player_state/*` rows (the onset of `Player_state/Super` is the old
-`Powerup_started/Super`, the end of `Player_state/Star` the old `Powerup_expired/Star`),
-and `Powerup_started/Small`, emitted on a hit, is the start of a `Player_state/Small`
+durational `PlayerState/*` rows (the onset of `PlayerState/Super` is the old
+`Powerup_started/Super`, the end of `PlayerState/Star` the old `Powerup_expired/Star`),
+and `Powerup_started/Small`, emitted on a hit, is the start of a `PlayerState/Small`
 row.
 
 ## Validation
