@@ -262,12 +262,16 @@ def count_powerups_collected(repetition_variables):
 
 
 def count_star_power_activations(repetition_variables):
-    """Count times star power was activated (star_power_timer goes from 0 to >0)."""
+    """Count times star power was activated (star_timer goes from 0 to >0).
+
+    Uses star_timer rather than star_power_timer, whose shipped SNES address holds
+    unrelated bytes (see videogames_utils.events.generators.smb1).
+    """
     try:
-        if "star_power_timer" not in repetition_variables:
+        if "star_timer" not in repetition_variables:
             return None
         
-        timer = repetition_variables["star_power_timer"]
+        timer = repetition_variables["star_timer"]
         activations = 0
         
         for idx in range(1, len(timer)):
@@ -342,11 +346,14 @@ def _get_final_powerup_state(repetition_variables):
     """
     Get the final powerup state as a human-readable string.
     
-    player_powerup values:
+    player_status values:
     0 = Small, 1 = Big, 2 = Fire
+
+    Uses player_status rather than player_powerup, whose shipped SNES address holds
+    unrelated bytes (see videogames_utils.events.generators.smb1).
     """
     try:
-        powerup = _safe_get_last(repetition_variables, "player_powerup")
+        powerup = _safe_get_last(repetition_variables, "player_status")
         if powerup is not None:
             powerup_names = {0: "small", 1: "big", 2: "fire"}
             return powerup_names.get(powerup, f"unknown_{powerup}")
