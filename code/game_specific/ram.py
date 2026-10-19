@@ -41,6 +41,14 @@ SMAS_CANDIDATES: List[Candidate] = [
               "post-hit invulnerability countdown, 8 -> 0 over ~212 frames"),
     Candidate("star_timer", 0x07AF, "|u1", "StarInvincibleTimer",
               "star countdown, 35 -> 0 over ~730 frames. Replaces 'star_power_timer'"),
+    # Player_State is $001D on the NES, just before Enemy_State ($001E..); this port's
+    # sprite_state_* table starts at $0029, and $0028 behaves exactly like the NES byte:
+    # 0 on the ground, 1 rising, 2 falling, 3 for the 87 frames of the flagpole slide of
+    # every cleared level. Over 40 replays with bricks, 328 of the 331 +50 score steps
+    # during play happen at 1 -- the head striking the brick from below.
+    Candidate("jump_airborne", 0x0028, "|u1", "Player_State",
+              "0 on the ground, 1 jumping, 2 falling, 3 flagpole slide; same name as "
+              "the NES variable. Lets BlockSmashed require the player to be airborne"),
 ]
 
 
