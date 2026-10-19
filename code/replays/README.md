@@ -1,54 +1,81 @@
-# Mario Stars Replay Processing
+# mariostars replay processing
 
-Processes `.bk2` replay files to generate video, metadata, game variables, and low-level features.
+Replays every `.bk2` of the dataset in the emulator and writes, next to it in
+`sub-*/ses-*/gamelogs/`, its frame-by-frame game variables, a video, low-level features
+and a summary. The pipeline is `videogames_utils.replays`, shared by the CNeuroMod
+videogame datasets; what is specific to Super Mario All-Stars: Super Mario Bros. (SNES) lives in `code/game_specific/`.
 
-## Prerequisites & Installation
+## Installation
 
-1.  **Environment**: Python 3.8+, Mariostars dataset (with `.bk2` replays), and ROMs in `stimuli/`.
-2.  **Setup**:
-    ```bash
-    python -m venv env
-    source env/bin/activate
-    git submodule update --init code/videogames_utils
-    pip install -r code/replays/requirements.txt
-    ```
+```bash
+python -m venv env
+source env/bin/activate
+git submodule update --init code/videogames_utils
+pip install -r code/replays/requirements.txt
+```
+
+The ROM and the integration (`data.json`, states, scenarios) are in
+`stimuli/SuperMarioAllStars-Snes/`.
 
 ## Usage
 
 ```bash
-python code/replays/generate_replays.py
+python code/replays/generate_replays.py -nj -1
+python code/replays/generate_replays.py -sub sub-01 -ses ses-001 --skip_videos
 ```
 
-### Arguments
--   `--datapath`: Root directory of the dataset.
--   `--output`: Output directory.
--   `--skip_videos`, `--skip_variables`, `--skip_lowlevel`: Skip specific outputs.
--   `--n_jobs`: Number of parallel jobs (default: all cores).
--   `--subjects`, `--sessions`: Filter processing.
--   `--stimuli`: Custom path for ROMs.
--   `--verbose`: Enable detailed logging.
+- `-d`, `--datapath`: dataset root (default: the current directory).
+- `-o`, `--output`: where to write the outputs (default: the dataset root).
+- `-s`, `--stimuli`: where the integration is (default: `<datapath>/stimuli`).
+- `-nj`, `--n_jobs`: parallel jobs, `-1` for all cores (default: 1).
+- `--subjects`, `--sessions`: process only these, e.g. `-sub sub-01 -ses ses-001`.
+- `--skip_videos`, `--skip_variables`, `--skip_lowlevel`: skip an output.
+- `--force`: regenerate outputs that already exist (needed when `data.json` has gained
+  variables).
+- `-v`, `--verbose`: detailed logging.
 
-## Generated Files
+At the end, every replay whose `done` flag is not set on its last frame only is listed:
+it ends on the scenario's done condition otherwise, so this points at a problem with the
+recording.
 
-For each replay (e.g., `sub-{subject}_ses-{session}_task-mariostars_run-{run}_rep-{replay}.bk2`):
-1.  `*_recording.mp4`: Video recording.
-2.  `*_variables.json`: Frame-by-frame RAM variables.
-3.  `*_lowlevel.npy`: Luminance, optical flow, and audio features.
-4.  `*_summary.json`: Summary metadata (BIDS sidecar).
+## Generated files
 
-## Summary Variables (in sidecar JSON)
+For each `sub-*_ses-*_task-mariostars_*.bk2`:
 
-All variables rely on RAM addresses defined in `stimuli/SuperMarioAllStars-Snes/data.json`.
+- `*_variables.json`: the game variables of `data.json`, one value per frame, and the
+  buttons pressed.
+- `*_recording.mp4`: the replay with its audio, at the emulator's frame rate.
+- `*_lowlevel.npy`: luminance, optical flow and audio envelope, per frame.
+- `*_summary.json`: one record per repetition, below.
 
-| Variable | Source / Logic |
-| :--- | :--- |
-| **Duration** | Total replay duration in seconds. |
-| **Outcome** | `cleared` (flag hit[state 4] & lives≥0), `failed/timeout` (timer=0), `failed/fall` (life lost, no state 11), `failed/killed` (life lost, state 11), `incomplete/warp` (no flag/death, `current_world`/`current_level` changed = warp-zone pipe exit e.g. W1-2/W4-2), `incomplete/interrupted` (no flag/death/warp = recording cut mid-level). |
-| **X_traveled** | Distance traveled to flag hit (or end if not cleared). |
-| **Enemies_killed** | Count of sprite_state transitions to kill states (4, 34). |
-| **Hits_taken** | Count of hit events (powerup loss, life loss, fall). |
-| **Bricks_smashed** | Count of `score` increments of 50 (before flag hit only). |
-| **Coins** | Coin count changes. |
-| **Powerups_collected** | Count of powerup collections (action_state transitions 8→9, 8→12). |
-| **Stars_collected** | Count of star_power_timer activations. |
-| **Phase** | `discovery` (level repeats) or `practice` (sequential progression). |
+## Summary fields
+
+Common to the CNeuroMod videogame datasets:
+
+| Field | Meaning |
+|---|---|
+| `Subject`, `Session`, `Run` | BIDS labels, e.g. `sub-01`, `ses-002`, `run-01`. |
+| `Level` | The `level-` entity of the `.bk2`. |
+| `Bk2File` | The `.bk2`, relative to the dataset root. |
+| `IndexInRun` | Position among the run's repetitions that have a `.bk2`, from 0. |
+| `IndexGlobal`, `IndexLevel` | Position among the subject's repetitions, overall and at this level, in the order they were played, from 0. |
+| `Phase` | The protocol phase: always `practice`. |
+| `Outcome` | How the repetition ended: `cleared`, `failed/killed`, `failed/fall`, `failed/timeout`, `incomplete/warp`, `incomplete/interrupted`. |
+| `Duration`, `FrameCount` | Length of the replay, in seconds and in frames. |
+
+Specific to Super Mario All-Stars: Super Mario Bros. (SNES):
+
+| Field | Meaning |
+|---|---|
+| `ScoreGained` | `score` at the last frame minus the first. |
+| `LivesLost` | `lives` at the first frame minus the last. |
+| `HitsTaken` | `PlayerDamaged` + `PlayerDied/Enemy` events: hits that cost a power-up or a life. Falls and timeouts are not hits. |
+| `EnemiesDefeated` | Transitions of `sprite_state_*` into a kill state. |
+| `CoinsCollected` | `coins` at the last frame minus the first. |
+| `PowerupsCollected` | Power-up animations of the game engine (`player_action_state`). |
+| `StarsCollected` | Times `star_timer` goes from 0 to non-zero. |
+| `BricksSmashed` | `BlockSmashed` events: a brick broken from below while airborne. |
+| `DistanceTraveled` | Horizontal scroll covered, up to the flagpole when the level is cleared, in pixels. |
+| `AverageSpeed` | `DistanceTraveled` over the time up to the flagpole (or the whole replay), in pixels per second. |
+| `FinalTimer` | The level timer at the flagpole, or at the last frame. |
+| `FinalForm` | The player's form at the last frame (`player_status`). |
