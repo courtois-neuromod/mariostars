@@ -123,6 +123,10 @@ class Port:
     #: intro screen is invisible to it; on the NES the engine reads 0 there.
     task_var: Optional[str] = None
     task_decode: Optional[Callable[[int], int]] = None
+    #: Square2SoundQueue ($FE), where the pickup routine (HandlePowerUpCollision) queues
+    #: Sfx_PowerUpGrab on the frame a power-up is collected. Not recorded on the SNES,
+    #: where a pickup is read from PlayerStatus and the star timer instead.
+    pickup_sound_var: Optional[str] = None
 
 
 def _smas_oper_mode_task(value: int) -> int:
@@ -298,13 +302,12 @@ def _transitions(series, predicate) -> List[int]:
     return out
 
 
-def generate(repvars: dict, level=None, outcome: Optional[str] = None,
+def generate(repvars: dict, outcome: Optional[str] = None,
              stim_file: Optional[str] = None, **defaults) -> "object":
     """Build the events DataFrame for one SMB1 repetition.
 
     Args:
         repvars: The repetition's ``_variables.json`` contents.
-        level: Level label to stamp on every row; defaults to ``repvars["level"]``.
         outcome: The summary ``Outcome``, used to gate the warp event.
         stim_file: The repetition's ``.bk2``; unused.
         **defaults: Extra columns copied onto every row (phase, Index*, stim_file).
@@ -315,8 +318,7 @@ def generate(repvars: dict, level=None, outcome: Optional[str] = None,
     port = PORT
     fs = FRAME_RATE
     d = _Vars(repvars, port)
-    acc = EventAccumulator(level if level is not None else repvars.get("level"), fs,
-                           **defaults)
+    acc = EventAccumulator(fs, **defaults)
 
     _actions(acc, repvars)
     _level_events(acc, d, port, outcome)
@@ -331,14 +333,13 @@ def generate(repvars: dict, level=None, outcome: Optional[str] = None,
 # --------------------------------------------------------------------------- actions
 
 #: Raw button -> Action/* event. Super Mario All-Stars uses B/Y for jump and run, where
-#: the NES uses A/B. A and X are alternate bindings for jump and run on the SNES pad; L
-#: and R have no documented function in SMAS's SMB1, so they are reported as Action/Other
-#: with the raw button preserved rather than being assigned a meaning we cannot justify.
+#: the NES uses A/B. A and X are alternate bindings for jump and run on the SNES pad.
+#: L and R produce no row: the L presses in the .bk2 files are the scanner's sync pulses
+#: (the task assigned the sync key "5" to L).
 BUTTON_ACTIONS = {
     "LEFT": "Action/Left", "RIGHT": "Action/Right", "UP": "Action/Up",
     "DOWN": "Action/Down", "START": "Action/Start", "SELECT": "Action/Select",
     "B": "Action/Jump", "Y": "Action/Run", "A": "Action/Jump", "X": "Action/Run",
-    "L": "Action/Other", "R": "Action/Other",
 }
 
 
@@ -671,6 +672,39 @@ def _item_events(acc: EventAccumulator, d: _Vars, port: Port) -> None:
             continue  # handled as FlagpoleVisible / CastleVisible
         else:
             acc.add(f"ItemOnScreen/{name}", track.frame_start, track.frame_stop)
+
+    _pickup_events(acc, d, port)
+
+
+#: Sfx_PowerUpGrab, queued on Square2SoundQueue when a power-up is collected.
+SFX_POWERUP_GRAB = 0x20
+#: PowerUpType ($0039) of a 1-up mushroom, whose pickup is LifeGained.
+POWERUP_1UP = 3
+
+
+def _pickup_events(acc: EventAccumulator, d: _Vars, port: Port) -> None:
+    """ItemCollected/Powerup: one row on the frame a mushroom, flower or star is collected.
+
+    With a pickup sound (NES), every pickup queues Sfx_PowerUpGrab on that frame, whatever
+    the item does to the player; a 1-up mushroom (PowerUpType 3) is LifeGained instead.
+    Without one (SNES), a pickup is the frame PlayerStatus rises or the star timer starts,
+    so a flower taken as Fire Mario, which changes nothing, has no row.
+    """
+    if port.pickup_sound_var:
+        sound, kind = d.scalar(port.pickup_sound_var), d.scalar("powerup_type")
+        for frame in range(1, d.n):
+            if (sound[frame] & SFX_POWERUP_GRAB and not sound[frame - 1] & SFX_POWERUP_GRAB
+                    and kind[frame] != POWERUP_1UP):
+                acc.add("ItemCollected/Powerup", frame)
+        return
+    status, star = d.v.get(port.powerup_var), d.v.get(port.star_timer_var)
+    if not status or not star:
+        return  # _variables.json predating the variables
+    for frame in range(1, d.n):
+        rose = (status[frame] in FORM_NAMES and status[frame - 1] in FORM_NAMES
+                and status[frame] > status[frame - 1])
+        if rose or (star[frame] and not star[frame - 1]):
+            acc.add("ItemCollected/Powerup", frame)
 
 
 # ---------------------------------------------------------------- environment events
