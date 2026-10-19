@@ -641,7 +641,8 @@ def _item_events(acc: EventAccumulator, d: _Vars, port: Port) -> None:
     engine = d.scalar(port.engine_var)
     ends = _transitions(engine, lambda v: v in (ENGINE_FLAGPOLE_SLIDE, ENGINE_END_LEVEL))
     cutoff = ends[0] if ends else d.n
-    airborne = None
+    # Player_State (`jump_airborne`); absent from a _variables.json predating it.
+    airborne = d.v.get("jump_airborne")
     for frame in range(1, min(cutoff, d.n)):
         if score[frame] - score[frame - 1] != port.brick_score_delta:
             continue
