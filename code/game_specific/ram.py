@@ -18,7 +18,7 @@ from videogames_utils.events.ram import Candidate
 # The port keeps SMB1's $07xx player block at the same WRAM offsets ($7E0756 is still
 # PlayerStatus) and shifts the timer block by +$10. The shipped data.json's
 # "player_powerup" ($0578) and "star_power_timer" ($0553) do NOT hold what their names
-# say: over all 1232 replays player_powerup takes values such as 28, 82, 107 and 231 with
+# say: over all the replays player_powerup takes values such as 28, 82, 107 and 231 with
 # no relation to the engine's grow/hit transitions (it produced rows like
 # "Powerup_started/107"), and star_power_timer holds constants rather than a countdown.
 # Both are left in place (see apply_ram.MISLABELLED); the generator uses these instead.
