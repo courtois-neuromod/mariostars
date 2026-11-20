@@ -1,7 +1,7 @@
 {
   "AcquisitionMatrixPE": 104,
   "AcquisitionNumber": 1,
-  "AcquisitionTime": "19:32:34.612500",
+  "AcquisitionTime": "19:20:57.540000",
   "BandwidthPerPixelPhaseEncode": 17.17,
   "BaseResolution": 104,
   "BodyPartExamined": "BRAIN",
@@ -66,7 +66,7 @@
   "SequenceName": "epfid2d1_104",
   "SequenceVariant": "SK\\SS",
   "SeriesDescription": "func_task-mariostars_run-05_SBRef",
-  "SeriesNumber": 22,
+  "SeriesNumber": 19,
   "ShimSetting": [
     590,
     -7264,
@@ -91,12 +91,12 @@
     0.8825,
     0.98,
     1.0775,
-    1.175,
+    1.1775,
     1.275,
     1.3725,
     1.47,
     1.5675,
-    1.665,
+    1.6675,
     1.765,
     1.8625,
     1.96,
@@ -146,5 +146,5 @@
   "TaskName": "mariostars",
   "TotalReadoutTime": 0.0576811,
   "TxRefAmp": 289.344,
-  "WipMemBlock": "1a15d2c0-146c-4aca-a74c-f285df4ab6d4||Sequence: R017 ve11c/master r/75a17815+; Jun 28 2022 16:32:11 by eja"
+  "WipMemBlock": "26a9ee15-ce1e-4cff-a342-ede458fcd0cd||Sequence: R017 ve11c/master r/75a17815+; Jun 28 2022 16:32:11 by eja"
 }
