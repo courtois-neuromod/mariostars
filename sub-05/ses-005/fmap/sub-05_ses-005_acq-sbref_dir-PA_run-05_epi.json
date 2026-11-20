@@ -33,7 +33,7 @@
   "InstitutionName": "IUGM",
   "InstitutionalDepartmentName": "Department",
   "IntendedFor": [
-    "ses-005/func/sub-05_ses-005_task-mariostars_run-04_part-mag_bold.nii.gz"
+    "ses-005/func/sub-05_ses-005_task-mariostars_run-05_part-mag_bold.nii.gz"
 ],
   "MRAcquisitionType": "2D",
   "MagneticFieldStrength": 3,
@@ -50,7 +50,7 @@
   "PhaseResolution": 1,
   "PixelBandwidth": 2290,
   "ProcedureStepDescription": "games^mariostars",
-  "ProtocolName": "func_task-mariostars_run-04",
+  "ProtocolName": "func_task-mariostars_run-05",
   "PulseSequenceDetails": "%CustomerSeq%\\cmrr_mbep2d_bold",
   "ReceiveCoilActiveElements": "HC1-7;NC1,2",
   "ReceiveCoilName": "HeadNeck_64",
@@ -61,7 +61,7 @@
   "ScanningSequence": "EP",
   "SequenceName": "epfid2d1_104",
   "SequenceVariant": "SK\\SS",
-  "SeriesDescription": "func_task-mariostars_run-04_SBRef",
+  "SeriesDescription": "func_task-mariostars_run-05_SBRef",
   "SeriesNumber": 19,
   "ShimSetting": [590, -7264, -8832, 382, 0, -328, 13, 50],
   "SliceThickness": 2,

@@ -57,7 +57,7 @@
   "PhaseResolution": 1,
   "PixelBandwidth": 2290,
   "ProcedureStepDescription": "games^mariostars",
-  "ProtocolName": "func_task-mariostars_run-04",
+  "ProtocolName": "func_task-mariostars_run-05",
   "PulseSequenceDetails": "%CustomerSeq%\\cmrr_mbep2d_bold",
   "ReceiveCoilActiveElements": "HC1-7;NC1,2",
   "ReceiveCoilName": "HeadNeck_64",
@@ -68,7 +68,7 @@
   "ScanningSequence": "EP",
   "SequenceName": "epfid2d1_104",
   "SequenceVariant": "SK\\SS",
-  "SeriesDescription": "func_task-mariostars_run-04_SBRef",
+  "SeriesDescription": "func_task-mariostars_run-05_SBRef",
   "SeriesNumber": 19,
   "ShimSetting": [
     590,
