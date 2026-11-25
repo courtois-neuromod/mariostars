@@ -9,4 +9,6 @@
 # annex event files as they contain subjects behavioral responses
 sub-*/**/*_events.tsv annex.largefiles=anything
 *.bk2 annex.largefiles=anything
+*.mp4 annex.largefiles=anything
+*.npy annex.largefiles=anything
 .bidsignore annex.largefiles=nothing
